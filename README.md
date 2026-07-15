@@ -42,7 +42,7 @@ Decisiones de fondo en [docs/adr/](docs/adr/).
 
 ## Puesta en marcha
 
-Requisitos: Docker, Python ≥3.12, Node ≥20.
+Requisitos: Docker, Python ≥3.12, Node 24 (la CI usa la misma).
 
 ```bash
 # 1. Infraestructura
