@@ -54,7 +54,8 @@ python -m venv .venv
 ./.venv/Scripts/python.exe -m pip install -e ".[dev]"   # Linux/macOS: .venv/bin/python
 ./.venv/Scripts/python.exe -m alembic upgrade head
 
-# 3. Ingerir e indexar (la primera vez descarga ~17 MB de Orphanet)
+# 3. Ingerir e indexar (~2 min desde cero: descarga ~17 MB de Orphanet,
+#    parsea 2 XML de 21 MB y carga 11.645 enfermedades)
 ./.venv/Scripts/python.exe -m morbirari_etl ingest orphanet --lang en,es
 ./.venv/Scripts/python.exe -m morbirari_etl index rebuild --lang en,es
 ./.venv/Scripts/python.exe -m morbirari_etl status
@@ -105,6 +106,8 @@ Lo esencial:
 - **OMIM no.** Sus términos prohíben crear bases de datos derivadas. Guardamos números
   MIM (hechos) y enlazamos; nunca su texto. Hay una aserción en el loader que lo impide.
 - `data/raw/` está en `.gitignore`: los datasets se descargan, no se versionan.
+  Reconstruir desde cero cuesta ~2 minutos, y Orphanet ya archiva sus versiones
+  anteriores. El porqué, en [ADR 0004](docs/adr/0004-no-versionar-los-datos-en-el-repo.md).
 
 Este proyecto usa datos de Orphanet:
 
