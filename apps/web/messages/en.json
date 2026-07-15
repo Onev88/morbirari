@@ -1,0 +1,56 @@
+{
+  "site": {
+    "name": "Morbi Rari",
+    "tagline": "Centralized search for rare disease information"
+  },
+  "search": {
+    "placeholder": "Search a disease, a name, an ORPHA or OMIM code…",
+    "submit": "Search",
+    "hint": "Try “cystic fibrosis”, “mucoviscidosis”, “Marfan”, or “OMIM:219700”.",
+    "resultsFor": "Results for “{query}”",
+    "count": "{count, plural, =0 {No results} one {1 result} other {# results}}",
+    "noResults": "Nothing found. Check the spelling, or try another name for it.",
+    "degraded": "Search is running in degraded mode: results may be less precise.",
+    "empty": "Type something to start searching."
+  },
+  "disease": {
+    "orphaCode": "ORPHA code",
+    "synonyms": "Synonyms",
+    "definition": "Definition",
+    "noDefinition": "This disease has no definition published in the source.",
+    "xrefs": "References in other vocabularies",
+    "type": "Type",
+    "expertLink": "Orphanet page",
+    "retired": "This entry is marked as retired in the original source.",
+    "definitionInEnglish": "",
+    "labelInEnglish": "",
+    "relation": {
+      "exact": "exact equivalence",
+      "ntbt": "this term is narrower",
+      "btnt": "this term is broader",
+      "nd": "relation not determined",
+      "unknown": "unknown relation"
+    },
+    "validated": "validated",
+    "backToSearch": "Back to search"
+  },
+  "provenance": {
+    "source": "Source",
+    "version": "Version",
+    "retrieved": "Retrieved on {date}"
+  },
+  "disclaimer": {
+    "short": "Reference information. Not medical advice, and not for diagnosis.",
+    "title": "Important notice",
+    "notAdvice": "Morbi Rari does not provide medical advice and is not a substitute for consulting a healthcare professional.",
+    "noRelationship": "Using this site does not create a doctor-patient relationship.",
+    "noDiagnosis": "This site does not diagnose. It does not determine what condition a person has, nor suggest diagnoses from symptoms.",
+    "thirdParty": "Information comes from third-party sources and may be outdated, incomplete, or contain errors.",
+    "consult": "For any concern about your health, consult a qualified professional.",
+    "emergency": "In an emergency, contact your local emergency services."
+  },
+  "nav": {
+    "language": "Language",
+    "home": "Home"
+  }
+}

@@ -1,0 +1,40 @@
+[project]
+name = "morbirari-etl"
+version = "0.1.0"
+description = "Ingesta de fuentes de enfermedades raras para Morbi Rari"
+requires-python = ">=3.12"
+dependencies = [
+    "typer>=0.12",
+    "httpx>=0.27",
+    "lxml>=5.2",
+    "pydantic>=2.7",
+    "psycopg[binary]>=3.1",
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    "meilisearch>=0.31",
+    "python-dotenv>=1.0",
+    "rich>=13.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+mr = "morbirari_etl.__main__:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/morbirari_etl"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

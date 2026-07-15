@@ -1,0 +1,33 @@
+name: ETL programado
+
+# Orphanet publica una vez al año, pero el mes ha variado entre junio y julio según
+# la fuente. En lugar de fijar una fecha, sondeamos mensualmente: el adaptador
+# compara el checksum del artefacto y no hace nada si no ha cambiado.
+on:
+  schedule:
+    - cron: "0 3 1 * *"
+  workflow_dispatch:
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: etl
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - run: alembic upgrade head
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - run: python -m morbirari_etl ingest orphanet --lang en,es
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - run: python -m morbirari_etl index rebuild --lang en,es
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          MEILI_URL: ${{ secrets.MEILI_URL }}
+          MEILI_MASTER_KEY: ${{ secrets.MEILI_MASTER_KEY }}

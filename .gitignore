@@ -1,0 +1,36 @@
+# Datos de fuentes externas — NUNCA se versionan en un repo público.
+# Se descargan en tiempo de ejecución. Ver DATA_LICENSES.md.
+data/raw/
+data/staging/
+data/*.db
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+
+# Entorno
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Editores / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
