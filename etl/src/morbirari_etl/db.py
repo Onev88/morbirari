@@ -307,6 +307,140 @@ class DiseaseAttribute(Base):
     )
 
 
+class Trial(Base):
+    """Un ensayo clínico registrado en ClinicalTrials.gov.
+
+    Es la mejor respuesta libre a «dónde se investiga esto» y «a dónde puedo acudir»:
+    los centros expertos y las asociaciones de pacientes de Orphanet exigen firmar un
+    acuerdo de transferencia de datos, mientras que ClinicalTrials.gov es obra del
+    gobierno de EE.UU. y publica quién investiga, dónde y si está reclutando.
+    """
+
+    __tablename__ = "trial"
+
+    nct_id: Mapped[str] = mapped_column(String(16), primary_key=True)
+    title: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(32), index=True)
+    phase: Mapped[str | None] = mapped_column(String(32))
+    study_type: Mapped[str | None] = mapped_column(String(32))
+    lead_sponsor: Mapped[str | None] = mapped_column(Text)
+    sponsor_class: Mapped[str | None] = mapped_column(String(32))
+    enrollment: Mapped[int | None] = mapped_column(Integer)
+    start_date: Mapped[str | None] = mapped_column(String(16))
+    last_update: Mapped[str | None] = mapped_column(String(16))
+    provenance_id: Mapped[int | None] = mapped_column(
+        ForeignKey("provenance.id", ondelete="SET NULL")
+    )
+
+    locations: Mapped[list["TrialLocation"]] = relationship(
+        back_populates="trial", cascade="all, delete-orphan"
+    )
+
+
+class TrialLocation(Base):
+    """Un centro donde se lleva a cabo un ensayo. Esto es el «a dónde acudir»."""
+
+    __tablename__ = "trial_location"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    nct_id: Mapped[str] = mapped_column(
+        ForeignKey("trial.nct_id", ondelete="CASCADE"), index=True
+    )
+    facility: Mapped[str | None] = mapped_column(Text)
+    city: Mapped[str | None] = mapped_column(String(128))
+    country: Mapped[str | None] = mapped_column(String(128), index=True)
+    status: Mapped[str | None] = mapped_column(String(32))
+
+    trial: Mapped[Trial] = relationship(back_populates="locations")
+
+    __table_args__ = (
+        UniqueConstraint("nct_id", "facility", "city", name="uq_trial_location"),
+    )
+
+
+class DiseaseTrial(Base):
+    """Vínculo enfermedad-ensayo. Siempre inferido, nunca afirmado.
+
+    ClinicalTrials.gov no conoce los códigos ORPHA. El vínculo se establece a través
+    del código MeSH que Orphanet publica para la enfermedad, que es mucho más fiable
+    que casar cadenas de texto — pero sigue siendo una inferencia nuestra, no un dato
+    de la fuente. Por eso `match_method` y `match_confidence` existen y la interfaz
+    lo dice.
+    """
+
+    __tablename__ = "disease_trial"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    disease_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("disease.id", ondelete="CASCADE"), index=True
+    )
+    nct_id: Mapped[str] = mapped_column(ForeignKey("trial.nct_id", ondelete="CASCADE"))
+    match_method: Mapped[str] = mapped_column(String(32))  # mesh | text
+    match_confidence: Mapped[str] = mapped_column(String(16))  # high | medium | low
+    matched_on: Mapped[str | None] = mapped_column(String(64))
+    provenance_id: Mapped[int | None] = mapped_column(
+        ForeignKey("provenance.id", ondelete="SET NULL")
+    )
+
+    trial: Mapped[Trial] = relationship()
+
+    __table_args__ = (UniqueConstraint("disease_id", "nct_id", name="uq_disease_trial"),)
+
+
+class OrphanDrug(Base):
+    """Designación de medicamento huérfano de una agencia reguladora.
+
+    Ojo con lo que esto es y no es: una designación huérfana NO significa que el
+    fármaco esté aprobado ni disponible. Significa que el regulador ha reconocido que
+    se desarrolla para una enfermedad rara. La interfaz debe decirlo, o el dato se
+    lee como «hay tratamiento», que es exactamente lo que no dice.
+    """
+
+    __tablename__ = "orphan_drug"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    agency: Mapped[str] = mapped_column(String(16), index=True)  # EMA | FDA
+    designation_number: Mapped[str] = mapped_column(String(64))
+    medicine_name: Mapped[str | None] = mapped_column(Text)
+    active_substance: Mapped[str | None] = mapped_column(Text)
+    intended_use: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str | None] = mapped_column(String(32))
+    designation_date: Mapped[str | None] = mapped_column(String(16))
+    url: Mapped[str | None] = mapped_column(Text)
+    provenance_id: Mapped[int | None] = mapped_column(
+        ForeignKey("provenance.id", ondelete="SET NULL")
+    )
+
+    __table_args__ = (
+        UniqueConstraint("agency", "designation_number", name="uq_orphan_drug"),
+    )
+
+
+class DiseaseDrug(Base):
+    """Vínculo enfermedad-fármaco. Inferido por texto, y por eso el más frágil.
+
+    Ni la EMA ni la FDA publican códigos ORPHA: la enfermedad es texto libre
+    («Treatment of Wilson's disease»). El emparejamiento es nuestro y puede fallar,
+    así que se guarda con qué se emparejó y con cuánta confianza, y la interfaz lo
+    presenta como una sugerencia verificable, no como un hecho.
+    """
+
+    __tablename__ = "disease_drug"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    disease_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("disease.id", ondelete="CASCADE"), index=True
+    )
+    drug_id: Mapped[int] = mapped_column(ForeignKey("orphan_drug.id", ondelete="CASCADE"))
+    match_method: Mapped[str] = mapped_column(String(32))
+    match_confidence: Mapped[str] = mapped_column(String(16))
+    matched_on: Mapped[str | None] = mapped_column(Text)
+
+    drug: Mapped[OrphanDrug] = relationship()
+
+    __table_args__ = (UniqueConstraint("disease_id", "drug_id", name="uq_disease_drug"),)
+
+
 class Classification(Base):
     """Una de las ~33 clasificaciones de Orphanet, por especialidad médica."""
 

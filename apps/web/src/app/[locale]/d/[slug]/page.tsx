@@ -4,12 +4,17 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getDiseaseBySlug } from "@/lib/db";
 import {
   getClassificationContext,
+  getDrugs,
   getGenes,
   getGeographicPrevalence,
+  getJapanDesignation,
   getKeyFacts,
+  getOtherLanguageLabels,
   getPhenotypes,
   getSubtypeGenes,
+  getTrials,
 } from "@/lib/dashboard";
+import { routing } from "@/i18n/routing";
 import { sanitizeDefinition } from "@/lib/sanitize";
 import { isCountryArea, localizeArea } from "@/lib/geo";
 import { PhenotypeList } from "./phenotype-list";
@@ -54,12 +59,26 @@ export default async function DiseasePage({ params }: Props) {
   const detail = await getDiseaseBySlug(slug, locale);
   if (!detail) notFound();
 
-  const [keyFacts, geography, phenotypes, genes, classifications] = await Promise.all([
+  const [
+    keyFacts,
+    geography,
+    phenotypes,
+    genes,
+    classifications,
+    trials,
+    drugs,
+    otherLangs,
+    jpDesignation,
+  ] = await Promise.all([
     getKeyFacts(detail.disease.id, locale),
     getGeographicPrevalence(detail.disease.id, locale),
     getPhenotypes(detail.disease.id, locale),
     getGenes(detail.disease.id),
     getClassificationContext(detail.disease.orpha_code, locale),
+    getTrials(detail.disease.id),
+    getDrugs(detail.disease.id),
+    getOtherLanguageLabels(detail.disease.id, [...routing.locales]),
+    getJapanDesignation(detail.disease.id),
   ]);
 
   // Orphanet cuelga los genes de los subtipos, no siempre de la enfermedad padre.
@@ -79,6 +98,11 @@ export default async function DiseasePage({ params }: Props) {
     geography.flatMap((g) => g.rows.map((r) => r.area).filter(isCountryArea))
   ).size;
 
+  // El contador de la pestaña cuenta solo lo reclutando: es lo único a lo que alguien
+  // puede acudir hoy. Prometer 40 ensayos y que estén todos cerrados es peor que no
+  // prometer nada.
+  const recruiting = trials.filter((t) => t.status === "RECRUITING");
+
   // El índice solo lista lo que existe: una sección vacía en la navegación es una
   // promesa incumplida.
   const sections = [
@@ -96,6 +120,10 @@ export default async function DiseasePage({ params }: Props) {
     ...(genes.length > 0 || subtypeGenes.length > 0
       ? [{ id: "genes", label: td("genes"), count: genes.length || subtypeGenes.length }]
       : []),
+    ...(trials.length > 0
+      ? [{ id: "donde-acudir", label: td("whereToGo"), count: recruiting.length }]
+      : []),
+    ...(drugs.length > 0 ? [{ id: "farmacos", label: td("drugs"), count: drugs.length }] : []),
     ...(classifications.length > 0 ? [{ id: "clasificacion", label: td("classification") }] : []),
     ...(detail.xrefs.length > 0
       ? [{ id: "referencias", label: td("codes"), count: detail.xrefs.length }]
@@ -177,6 +205,26 @@ export default async function DiseasePage({ params }: Props) {
             </div>
           </div>
         </div>
+
+        {/* Nombres fuera de los idiomas de la interfaz. Hoy es japonés, de NANDO: el
+            registro nipón es la única fuente que tenemos fuera del ámbito europeo, y
+            permite que alguien busque 表皮水疱症 y llegue aquí. */}
+        {otherLangs.length > 0 && (
+          <div className="other-langs">
+            {otherLangs.map((o) => (
+              <div key={o.lang} className="other-lang">
+                <span className="other-lang-tag">{o.lang.toUpperCase()}</span>
+                <span lang={o.lang}>{o.labels.slice(0, 3).join(" · ")}</span>
+              </div>
+            ))}
+            {jpDesignation && (
+              <div className="other-lang">
+                <span className="other-lang-tag">JP</span>
+                <span>{td("jpDesignation", { number: jpDesignation })}</span>
+              </div>
+            )}
+          </div>
+        )}
       </section>
 
       <section className="block" id="definicion">
@@ -392,6 +440,133 @@ export default async function DiseasePage({ params }: Props) {
               </li>
             ))}
           </ul>
+        </section>
+      )}
+
+      {trials.length > 0 && (
+        <section className="block" id="donde-acudir">
+          <h2>{td("whereToGo")}</h2>
+          {/*
+            Este encuadre no es un adorno legal: sin él, una lista de ensayos se lee
+            como «aquí me curan». Un ensayo es investigación, tiene criterios de
+            entrada y no es asistencia.
+          */}
+          <p className="section-intro">{td("whereToGoIntro")}</p>
+          <div className="notice inline">{td("trialsWarning")}</div>
+
+          <ul className="trial-list">
+            {trials.map((t) => (
+              <li key={t.nctId} className="trial">
+                <div className="trial-head">
+                  <span className={`badge ${t.status === "RECRUITING" ? "" : "neutral"}`}>
+                    {t.status === "RECRUITING"
+                      ? td("statusRecruiting")
+                      : t.status === "NOT_YET_RECRUITING"
+                        ? td("statusNotYet")
+                        : td("statusOther")}
+                  </span>
+                  {t.phase && <span className="badge neutral">{t.phase}</span>}
+                </div>
+                <a
+                  className="trial-title"
+                  href={`https://clinicaltrials.gov/study/${t.nctId}`}
+                  rel="noreferrer"
+                  target="_blank"
+                  lang="en"
+                >
+                  {t.title}
+                </a>
+                {t.leadSponsor && (
+                  <div className="trial-sponsor">
+                    {td("sponsor")}: <strong>{t.leadSponsor}</strong>
+                  </div>
+                )}
+                {t.locations.length > 0 && (
+                  <details className="trial-locations">
+                    <summary>
+                      {td("centres", { count: t.locations.length })}
+                      {t.countries.length > 0 && (
+                        <span className="dim">
+                          {" · "}
+                          {t.countries
+                            .slice(0, 4)
+                            .map((c) => localizeArea(c, locale))
+                            .join(", ")}
+                          {t.countries.length > 4 && ` +${t.countries.length - 4}`}
+                        </span>
+                      )}
+                    </summary>
+                    <ul className="location-list">
+                      {t.locations.map((l, i) => (
+                        <li key={`${t.nctId}-${i}`}>
+                          {l.facility && <span className="facility">{l.facility}</span>}
+                          <span className="dim">
+                            {[l.city, l.country ? localizeArea(l.country, locale) : null]
+                              .filter(Boolean)
+                              .join(", ")}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+              </li>
+            ))}
+          </ul>
+          <p className="hint">{td("trialsAttribution")}</p>
+        </section>
+      )}
+
+      {drugs.length > 0 && (
+        <section className="block" id="farmacos">
+          <h2>{td("drugs")}</h2>
+          {/*
+            La advertencia va arriba y en caja, no en letra pequeña: «designación
+            huérfana» suena a «hay tratamiento» y significa otra cosa muy distinta.
+          */}
+          <p className="section-intro">{td("drugsIntro")}</p>
+          <div className="notice inline">{td("drugsWarning")}</div>
+
+          <table className="drug-table">
+            <thead>
+              <tr>
+                <th>{td("drugName")}</th>
+                <th>{td("drugAgency")}</th>
+                <th>{td("drugDate")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {drugs.map((d, i) => (
+                <tr key={`${d.agency}-${i}`}>
+                  <td>
+                    {d.url ? (
+                      <a href={d.url} rel="noreferrer" target="_blank" lang="en">
+                        {d.medicineName || d.activeSubstance || "—"}
+                      </a>
+                    ) : (
+                      <span lang="en">{d.medicineName || d.activeSubstance || "—"}</span>
+                    )}
+                    {d.activeSubstance && d.medicineName && (
+                      <div className="dim small" lang="en">
+                        {d.activeSubstance}
+                      </div>
+                    )}
+                  </td>
+                  <td>
+                    <span className="badge neutral">{d.agency}</span>
+                  </td>
+                  <td className="dim small">{d.designationDate}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {/* Se enseña con qué texto se emparejó: el vínculo es inferido y el lector
+              tiene derecho a comprobarlo. */}
+          {drugs[0]?.matchedOn && (
+            <p className="hint">
+              {td("drugsMatchedOn")}: <em lang="en">{drugs[0].matchedOn}</em>
+            </p>
+          )}
         </section>
       )}
 

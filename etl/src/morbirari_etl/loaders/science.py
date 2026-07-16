@@ -19,18 +19,29 @@ from morbirari_etl.db import (
     ClassificationEdge,
     Disease,
     DiseaseAttribute,
+    DiseaseDrug,
     DiseaseGene,
+    DiseaseLabel,
     DiseasePhenotype,
+    DiseaseTrial,
+    DiseaseXref,
     Epidemiology,
     Gene,
+    OrphanDrug,
     Phenotype,
     PhenotypeLabel,
     Provenance,
+    Trial,
+    TrialLocation,
 )
 from morbirari_etl.loaders.postgres import assert_no_omim_text
+from morbirari_etl.sources.clinicaltrials.trials import StagedTrial
+from morbirari_etl.sources.ema.orphan_drugs import StagedDrug, normalize
 from morbirari_etl.sources.hpo.translations import StagedTranslation
+from morbirari_etl.sources.nando.japan import StagedNando
 from morbirari_etl.sources.orphanet.classifications import StagedClassification
 from morbirari_etl.sources.orphanet.science import (
+    StagedAlignment,
     StagedAttribute,
     StagedGene,
     StagedPhenotype,
@@ -357,6 +368,343 @@ def load_genes(
             assoc += len(values)
 
     return len(by_symbol), assoc
+
+
+def load_alignments(
+    session: Session,
+    rows: Iterable[StagedAlignment],
+    prov: Provenance,
+    index: dict[str, object],
+) -> int:
+    """Carga referencias cruzadas a otros vocabularios."""
+    count = 0
+    for batch in _batched(rows, 2000):
+        values = []
+        for r in batch:
+            disease_id = index.get(r.orpha_code)
+            if disease_id is None:
+                continue
+            # Solo identificadores cruzan esta frontera; nunca texto de OMIM.
+            assert_no_omim_text(r.source_ns, None)
+            values.append(
+                {
+                    "disease_id": disease_id,
+                    "source_ns": r.source_ns,
+                    "source_id": r.source_id,
+                    "relation": r.relation,
+                    "validated": r.validated,
+                    "provenance_id": prov.id,
+                }
+            )
+        values = _dedupe(values, "disease_id", "source_ns", "source_id")
+        if values:
+            session.execute(
+                insert(DiseaseXref)
+                .values(values)
+                .on_conflict_do_update(
+                    constraint="uq_xref",
+                    set_={
+                        "relation": insert(DiseaseXref).excluded.relation,
+                        "validated": insert(DiseaseXref).excluded.validated,
+                    },
+                )
+            )
+            count += len(values)
+    return count
+
+
+def load_trials(
+    session: Session,
+    trials: Iterable[StagedTrial],
+    disease_id,
+    mesh_id: str,
+    prov: Provenance,
+) -> int:
+    """Carga ensayos, sus centros y el vínculo con la enfermedad."""
+    count = 0
+    for batch in _batched(trials, 200):
+        trial_values = _dedupe(
+            [
+                {
+                    "nct_id": t.nct_id,
+                    "title": t.title,
+                    "status": t.status,
+                    "phase": t.phase,
+                    "study_type": t.study_type,
+                    "lead_sponsor": t.lead_sponsor,
+                    "sponsor_class": t.sponsor_class,
+                    "enrollment": t.enrollment,
+                    "start_date": t.start_date,
+                    "last_update": t.last_update,
+                    "provenance_id": prov.id,
+                }
+                for t in batch
+            ],
+            "nct_id",
+        )
+        if not trial_values:
+            continue
+
+        session.execute(
+            insert(Trial)
+            .values(trial_values)
+            .on_conflict_do_update(
+                index_elements=[Trial.nct_id],
+                set_={
+                    "status": insert(Trial).excluded.status,
+                    "title": insert(Trial).excluded.title,
+                    "last_update": insert(Trial).excluded.last_update,
+                },
+            )
+        )
+
+        loc_values = _dedupe(
+            [
+                {
+                    "nct_id": t.nct_id,
+                    "facility": loc.facility,
+                    "city": loc.city,
+                    "country": loc.country,
+                    "status": loc.status,
+                }
+                for t in batch
+                for loc in t.locations
+                if loc.facility or loc.city
+            ],
+            "nct_id",
+            "facility",
+            "city",
+        )
+        if loc_values:
+            session.execute(
+                insert(TrialLocation)
+                .values(loc_values)
+                .on_conflict_do_nothing(constraint="uq_trial_location")
+            )
+
+        link_values = _dedupe(
+            [
+                {
+                    "disease_id": disease_id,
+                    "nct_id": t.nct_id,
+                    # El vínculo es por código MeSH, no por texto: más fiable, pero
+                    # sigue siendo inferencia nuestra y la interfaz lo dice.
+                    "match_method": "mesh",
+                    "match_confidence": "high",
+                    "matched_on": mesh_id,
+                    "provenance_id": prov.id,
+                }
+                for t in batch
+            ],
+            "disease_id",
+            "nct_id",
+        )
+        session.execute(
+            insert(DiseaseTrial)
+            .values(link_values)
+            .on_conflict_do_nothing(constraint="uq_disease_trial")
+        )
+        count += len(trial_values)
+
+    return count
+
+
+def load_nando(
+    session: Session,
+    rows: Iterable[StagedNando],
+    prov: Provenance,
+    index: dict[str, object],
+) -> tuple[int, int]:
+    """Etiquetas japonesas y designación oficial. Devuelve (etiquetas, designaciones)."""
+    labels: list[dict] = []
+    attrs: list[dict] = []
+
+    for r in rows:
+        disease_id = index.get(r.orpha_code)
+        if disease_id is None:
+            continue
+
+        labels.append(
+            {
+                "disease_id": disease_id,
+                "lang": "ja",
+                "label": r.label_ja,
+                "label_type": "preferred",
+                "provenance_id": prov.id,
+            }
+        )
+        # El hiragana entra como sinónimo: es la misma enfermedad escrita de otro
+        # modo, y es como la busca mucha gente en japonés.
+        if r.label_hira:
+            labels.append(
+                {
+                    "disease_id": disease_id,
+                    "lang": "ja",
+                    "label": r.label_hira,
+                    "label_type": "synonym",
+                    "provenance_id": prov.id,
+                }
+            )
+
+        if r.notification_number:
+            attrs.append(
+                {
+                    "disease_id": disease_id,
+                    "lang": "ja",
+                    "attr_type": "jp_designation",
+                    "orphanet_attr_id": r.nando_id,
+                    "value": r.notification_number,
+                    "provenance_id": prov.id,
+                }
+            )
+
+    n_labels = 0
+    for batch in _batched(labels):
+        batch = _dedupe(batch, "disease_id", "lang", "label", "label_type")
+        session.execute(
+            insert(DiseaseLabel).values(batch).on_conflict_do_nothing(constraint="uq_label")
+        )
+        n_labels += len(batch)
+
+    n_attrs = 0
+    for batch in _batched(attrs):
+        batch = _dedupe(batch, "disease_id", "lang", "attr_type", "orphanet_attr_id")
+        session.execute(
+            insert(DiseaseAttribute)
+            .values(batch)
+            .on_conflict_do_update(
+                constraint="uq_disease_attribute",
+                set_={"value": insert(DiseaseAttribute).excluded.value},
+            )
+        )
+        n_attrs += len(batch)
+
+    return n_labels, n_attrs
+
+
+def load_orphan_drugs(
+    session: Session,
+    drugs: Iterable[StagedDrug],
+    agency: str,
+    prov: Provenance,
+) -> tuple[int, int]:
+    """Carga designaciones huérfanas y las empareja con enfermedades.
+
+    Devuelve (designaciones, vínculos).
+
+    Sobre el emparejamiento: solo coincidencia **exacta** del texto normalizado
+    contra una etiqueta de la enfermedad. Nada de aproximado, a propósito. Un
+    fármaco atribuido a la enfermedad equivocada es peor que un fármaco no
+    mostrado: el primero desinforma a alguien que busca tratamiento para lo suyo,
+    el segundo solo omite. Ante la duda, no se enlaza.
+    """
+    staged = list(drugs)
+
+    n_drugs = 0
+    for batch in _batched(staged):
+        values = _dedupe(
+            [
+                {
+                    "agency": agency,
+                    "designation_number": d.designation_number,
+                    "medicine_name": d.medicine_name,
+                    "active_substance": d.active_substance,
+                    "intended_use": d.intended_use,
+                    "status": d.status,
+                    "designation_date": d.designation_date,
+                    "url": d.url,
+                    "provenance_id": prov.id,
+                }
+                for d in batch
+            ],
+            "agency",
+            "designation_number",
+        )
+        if values:
+            session.execute(
+                insert(OrphanDrug)
+                .values(values)
+                .on_conflict_do_update(
+                    constraint="uq_orphan_drug",
+                    set_={
+                        "status": insert(OrphanDrug).excluded.status,
+                        "medicine_name": insert(OrphanDrug).excluded.medicine_name,
+                    },
+                )
+            )
+            n_drugs += len(values)
+
+    # Índice etiqueta normalizada -> disease_id. Se usan todas las etiquetas en
+    # inglés (preferidas y sinónimos): la EMA escribe en inglés, y muchas veces usa
+    # el sinónimo y no el nombre preferido.
+    label_index: dict[str, object] = {}
+    for disease_id, label in session.execute(
+        select(DiseaseLabel.disease_id, DiseaseLabel.label).where(DiseaseLabel.lang == "en")
+    ):
+        key = normalize(label)
+        if key and key not in label_index:
+            label_index[key] = disease_id
+
+    drug_ids = {
+        (agency_, number): did
+        for agency_, number, did in session.execute(
+            select(OrphanDrug.agency, OrphanDrug.designation_number, OrphanDrug.id)
+        ).all()
+    }
+
+    links: list[dict] = []
+    for d in staged:
+        if not d.intended_use:
+            continue
+        key = normalize(d.intended_use)
+        disease_id = label_index.get(key)
+        drug_id = drug_ids.get((agency, d.designation_number))
+        if disease_id is None or drug_id is None:
+            continue
+        links.append(
+            {
+                "disease_id": disease_id,
+                "drug_id": drug_id,
+                "match_method": "exact_label",
+                "match_confidence": "medium",
+                "matched_on": d.intended_use,
+            }
+        )
+
+    n_links = 0
+    for batch in _batched(links):
+        batch = _dedupe(batch, "disease_id", "drug_id")
+        session.execute(
+            insert(DiseaseDrug).values(batch).on_conflict_do_nothing(constraint="uq_disease_drug")
+        )
+        n_links += len(batch)
+
+    return n_drugs, n_links
+
+
+def mesh_ids_by_disease(
+    session: Session, skip_existing: bool = False
+) -> list[tuple[object, str, str]]:
+    """(disease_id, orpha_code, mesh_id) de las enfermedades con MeSH publicado.
+
+    `skip_existing` deja fuera las que ya tienen ensayos cargados, lo que hace la
+    ingesta reanudable. Importa: son ~3.200 peticiones a una API ajena, y un proceso
+    interrumpido a la mitad no debe obligar a empezar de cero ni a machacar a la
+    fuente repitiendo trabajo hecho.
+    """
+    stmt = (
+        select(Disease.id, Disease.orpha_code, DiseaseXref.source_id)
+        .join(DiseaseXref, DiseaseXref.disease_id == Disease.id)
+        .where(DiseaseXref.source_ns == "MESH", Disease.status == "active")
+    )
+    if skip_existing:
+        stmt = stmt.where(
+            ~select(DiseaseTrial.id)
+            .where(DiseaseTrial.disease_id == Disease.id)
+            .exists()
+        )
+    rows = session.execute(stmt.order_by(Disease.orpha_code)).all()
+    return [(r[0], r[1], r[2]) for r in rows]
 
 
 def load_classifications(

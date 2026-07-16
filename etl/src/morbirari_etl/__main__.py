@@ -10,7 +10,15 @@ from rich.table import Table
 from sqlalchemy import func, select
 
 from morbirari_etl.config import ACTIVE_LANGS, VALIDATION_FAILURE_THRESHOLD
-from morbirari_etl.db import Disease, DiseaseLabel, DiseaseXref, IngestRun, Source, get_sessionmaker
+from morbirari_etl.db import (
+    Disease,
+    DiseaseLabel,
+    DiseaseXref,
+    IngestRun,
+    Provenance,
+    Source,
+    get_sessionmaker,
+)
 from morbirari_etl.indexers import meilisearch as mi
 from morbirari_etl.loaders import postgres as pg
 from morbirari_etl.sources.hpo import translations as hpo_tr
@@ -122,6 +130,9 @@ def ingest_science(
 
     # (producto, etiqueta, ¿por idioma?)
     products = [
+        # Los alineamientos van primero: MeSH y GARD son lo que permite enlazar con
+        # ensayos clínicos y con los textos del NIH.
+        ("product1", "alineamientos", False),
         ("product9_prev", "epidemiología", True),
         ("product9_ages", "historia natural", True),
         ("product4", "signos clínicos", True),
@@ -158,7 +169,11 @@ def ingest_science(
                     index = sci_loader.disease_ids_by_orpha(session)
                     counts: dict[str, int] = {}
 
-                    if product == "product9_prev":
+                    if product == "product1":
+                        counts["referencias"] = sci_loader.load_alignments(
+                            session, sci.parse_alignments(artifact.path), prov, index
+                        )
+                    elif product == "product9_prev":
                         counts["prevalencias"] = sci_loader.load_epidemiology(
                             session, sci.parse_epidemiology(artifact.path), lang_code, prov, index
                         )
@@ -222,6 +237,210 @@ def ingest_science(
                 session.rollback()
                 console.print(f"  [red]FALLO[/red] {exc}")
                 raise typer.Exit(1) from exc
+
+
+@ingest_app.command("drugs")
+def ingest_drugs(force: bool = typer.Option(False, help="Reingerir aunque no haya cambios")) -> None:
+    """Ingiere las designaciones de medicamento huérfano de la EMA (datos abiertos).
+
+    Aviso: una designación huérfana no es un fármaco aprobado ni disponible. Muchas
+    nunca llegan a serlo.
+    """
+    from morbirari_etl.loaders import science as sci_loader
+    from morbirari_etl.sources.ema import orphan_drugs as ema
+
+    Session = get_sessionmaker()
+    console.print("[bold]EMA[/bold] · designaciones de medicamento huérfano")
+
+    artifact = ema.fetch(force=force)
+
+    with Session() as session:
+        if pg.has_successful_run_for_sha(session, ema.SOURCE_NAME, artifact.sha256) and not force:
+            console.print(f"  [dim]sin cambios (sha {artifact.sha256[:12]}), se salta[/dim]")
+            return
+
+        source = pg.upsert_source(
+            session,
+            name=ema.SOURCE_NAME,
+            license_spdx=None,
+            attribution_text=ema.ATTRIBUTION,
+            homepage="https://www.ema.europa.eu",
+            redistributable=True,
+        )
+        run = pg.start_run(session, source, artifact.sha256, None)
+        prov = pg.make_provenance(session, source, run, None, artifact.source_url)
+
+        try:
+            n_drugs, n_links = sci_loader.load_orphan_drugs(
+                session, ema.parse(artifact), ema.AGENCY, prov
+            )
+            pg.finish_run(session, run, "success", {"designaciones": n_drugs, "vinculos": n_links})
+            session.commit()
+            pct = (n_links / n_drugs * 100) if n_drugs else 0
+            console.print(
+                f"  [green]OK[/green] {n_drugs} designaciones · {n_links} enlazadas "
+                f"a una enfermedad ({pct:.0f}%)"
+            )
+        except Exception as exc:  # noqa: BLE001
+            session.rollback()
+            console.print(f"  [red]FALLO[/red] {exc}")
+            raise typer.Exit(1) from exc
+
+
+@ingest_app.command("nando")
+def ingest_nando(force: bool = typer.Option(False, help="Reingerir aunque no haya cambios")) -> None:
+    """Ingiere NANDO: el registro japonés de enfermedades intratables (CC BY 4.0).
+
+    Aporta nombres en japonés y la designación oficial nipona, que determina la
+    cobertura sanitaria allí. Es la única fuente que tenemos fuera del ámbito europeo.
+    """
+    from morbirari_etl.loaders import science as sci_loader
+    from morbirari_etl.sources.nando import japan as nando
+
+    Session = get_sessionmaker()
+    console.print("[bold]NANDO[/bold] · registro japonés de enfermedades intratables")
+
+    mapping_art, labels_art = nando.fetch(force=force)
+
+    with Session() as session:
+        if pg.has_successful_run_for_sha(session, nando.SOURCE_NAME, mapping_art.sha256) and not force:
+            console.print(f"  [dim]sin cambios (sha {mapping_art.sha256[:12]}), se salta[/dim]")
+            return
+
+        source = pg.upsert_source(
+            session,
+            name=nando.SOURCE_NAME,
+            license_spdx="CC-BY-4.0",
+            attribution_text=nando.ATTRIBUTION,
+            homepage="https://nanbyodata.jp",
+            redistributable=True,
+        )
+        run = pg.start_run(session, source, mapping_art.sha256, None)
+        prov = pg.make_provenance(session, source, run, None, mapping_art.source_url)
+
+        try:
+            index = sci_loader.disease_ids_by_orpha(session)
+            n_labels, n_attrs = sci_loader.load_nando(
+                session, nando.parse(mapping_art, labels_art), prov, index
+            )
+            pg.finish_run(session, run, "success", {"etiquetas_ja": n_labels, "designaciones": n_attrs})
+            session.commit()
+            console.print(
+                f"  [green]OK[/green] {n_labels} etiquetas en japonés · "
+                f"{n_attrs} designaciones oficiales"
+            )
+        except Exception as exc:  # noqa: BLE001
+            session.rollback()
+            console.print(f"  [red]FALLO[/red] {exc}")
+            raise typer.Exit(1) from exc
+
+
+@ingest_app.command("trials")
+def ingest_trials(
+    limit: int = typer.Option(0, help="Máximo de enfermedades a consultar (0 = todas)"),
+    resume: bool = typer.Option(
+        True, help="Saltar las enfermedades que ya tienen ensayos cargados"
+    ),
+    only: str = typer.Option("", help="Códigos ORPHA concretos, separados por comas"),
+) -> None:
+    """Ingiere ensayos clínicos abiertos desde ClinicalTrials.gov (dominio público).
+
+    Responde a «dónde se investiga» y «a dónde acudir»: patrocinadores y centros con
+    ciudad y país, solo de ensayos que siguen abiertos.
+
+    El vínculo se hace por código MeSH, que Orphanet publica para 3.209 enfermedades.
+    """
+    import httpx
+
+    from morbirari_etl.loaders import science as sci_loader
+    from morbirari_etl.sources.clinicaltrials import trials as ct
+
+    Session = get_sessionmaker()
+
+    with Session() as session:
+        targets = sci_loader.mesh_ids_by_disease(session, skip_existing=resume and not only)
+
+    if only:
+        wanted = {c.strip() for c in only.split(",") if c.strip()}
+        with Session() as session:
+            targets = [t for t in sci_loader.mesh_ids_by_disease(session) if t[1] in wanted]
+    if limit:
+        targets = targets[:limit]
+
+    console.print(
+        f"[bold]ClinicalTrials.gov[/bold] · {len(targets)} enfermedades por consultar"
+        + (" (reanudando)" if resume and not only else "")
+    )
+    if not targets:
+        console.print("  [dim]nada que hacer[/dim]")
+        return
+
+    with Session() as session:
+        source = pg.upsert_source(
+            session,
+            name=ct.SOURCE_NAME,
+            license_spdx=None,  # obra del gobierno de EE.UU., sin identificador SPDX
+            attribution_text=ct.ATTRIBUTION,
+            homepage="https://clinicaltrials.gov",
+            redistributable=True,
+        )
+        run = pg.start_run(session, source, "n/a", None)
+        prov = pg.make_provenance(session, source, run, None, ct.API)
+        session.commit()
+        run_id, prov_id = run.id, prov.id
+
+    total_trials = 0
+    with_trials = 0
+    errors = 0
+
+    import time
+
+    with httpx.Client(follow_redirects=True) as client:
+        for i, (disease_id, orpha_code, mesh_id) in enumerate(targets, 1):
+            # Una pausa por enfermedad, no solo entre páginas: son ~3.200 consultas a
+            # un servicio público y gratuito.
+            if i > 1:
+                time.sleep(ct.PAUSE)
+            try:
+                trials = list(ct.fetch_by_mesh(mesh_id, client))
+            except Exception as exc:  # noqa: BLE001
+                # Una enfermedad que falla no debe tumbar la ingesta entera: se anota
+                # y se sigue. El resto de los datos siguen sirviendo.
+                errors += 1
+                if errors <= 3:
+                    console.print(f"  [yellow]ORPHA {orpha_code} ({mesh_id}): {exc}[/yellow]")
+                continue
+
+            if not trials:
+                continue
+
+            with Session() as session:
+                prov_obj = session.get(Provenance, prov_id)
+                n = sci_loader.load_trials(session, trials, disease_id, mesh_id, prov_obj)
+                session.commit()
+            total_trials += n
+            with_trials += 1
+
+            if i % 200 == 0:
+                console.print(
+                    f"  [dim]{i}/{len(targets)} · {with_trials} con ensayos · "
+                    f"{total_trials} ensayos[/dim]"
+                )
+
+    with Session() as session:
+        run_obj = session.get(IngestRun, run_id)
+        pg.finish_run(
+            session,
+            run_obj,
+            "success",
+            {"enfermedades_con_ensayos": with_trials, "ensayos": total_trials, "errores": errors},
+        )
+        session.commit()
+
+    console.print(
+        f"  [green]OK[/green] {with_trials} enfermedades con ensayos abiertos · "
+        f"{total_trials} ensayos · {errors} errores"
+    )
 
 
 @ingest_app.command("classifications")

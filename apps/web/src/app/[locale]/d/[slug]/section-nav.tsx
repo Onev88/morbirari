@@ -5,52 +5,79 @@ import { useEffect, useState } from "react";
 type Section = { id: string; label: string; count?: number };
 
 /**
- * Navegación lateral de la ficha, con resaltado de la sección visible.
+ * Navegación de la ficha: muestra una sección a la vez.
  *
- * La ficha de una enfermedad con datos completos mide varias pantallas: sin un índice
- * hay que recorrerla entera para saber si hay genes. Esto convierte "hacer scroll a
- * ver qué hay" en "ver de un vistazo qué hay y saltar".
+ * Por qué así y no ocultando en el servidor: **todo el contenido está en el HTML**, y
+ * solo se oculta con CSS. Eso mantiene tres cosas que importan:
  *
- * Progresivamente mejorable: los enlaces son anclas normales y funcionan sin
- * JavaScript; el resaltado es lo único que necesita el observer.
+ * 1. Google indexa la ficha entera. Es la principal vía de entrada al sitio: la gente
+ *    busca el nombre de su enfermedad, y si los signos clínicos no están en el HTML,
+ *    no se encuentran.
+ * 2. Sin JavaScript se ve todo seguido, que es peor pero funciona. El fallo abre, no
+ *    cierra.
+ * 3. Ctrl+F del navegador encuentra lo que está en la sección visible; el resto sigue
+ *    a un clic.
+ *
+ * La sección activa va en el hash de la URL, así que un enlace a una sección concreta
+ * es compartible.
  */
 export function SectionNav({ sections }: { sections: Section[] }) {
-  const [active, setActive] = useState<string | null>(sections[0]?.id ?? null);
+  const [active, setActive] = useState<string>(sections[0]?.id ?? "");
+  // Hasta que el JS arranca no se oculta nada: si falla, la página queda completa en
+  // vez de quedar en blanco.
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const elements = sections
-      .map((s) => document.getElementById(s.id))
-      .filter((el): el is HTMLElement => el !== null);
-
-    if (elements.length === 0) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        // La sección activa es la más alta de las visibles: al hacer scroll hacia
-        // abajo, marcar la última que entra da la sensación de ir un paso por delante.
-        const visible = entries
-          .filter((e) => e.isIntersecting)
-          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-        if (visible[0]) setActive(visible[0].target.id);
-      },
-      // El margen superior descuenta la cabecera; el inferior evita que una sección
-      // que apenas asoma por abajo se lleve el foco.
-      { rootMargin: "-80px 0px -60% 0px", threshold: 0 }
-    );
-
-    elements.forEach((el) => observer.observe(el));
-    return () => observer.disconnect();
+    const fromHash = window.location.hash.slice(1);
+    const initial = sections.some((s) => s.id === fromHash) ? fromHash : sections[0]?.id;
+    if (initial) setActive(initial);
+    setReady(true);
   }, [sections]);
+
+  useEffect(() => {
+    if (!ready) return;
+
+    // El ocultado vive en el <body> vía atributo, y no en cada sección, para que el
+    // CSS lo resuelva de una vez y no haya parpadeo.
+    document.body.dataset.activeSection = active;
+    document.body.dataset.tabsReady = "true";
+
+    return () => {
+      delete document.body.dataset.activeSection;
+    };
+  }, [active, ready]);
+
+  useEffect(() => {
+    const onHashChange = () => {
+      const id = window.location.hash.slice(1);
+      if (sections.some((s) => s.id === id)) setActive(id);
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, [sections]);
+
+  function select(id: string) {
+    setActive(id);
+    // replaceState y no un salto de ancla: cambiar de pestaña no debe mover el scroll
+    // ni llenar el historial de entradas.
+    window.history.replaceState(null, "", `#${id}`);
+  }
 
   return (
     <nav className="section-nav" aria-label="Secciones">
-      <ul>
+      <ul role="tablist">
         {sections.map((s) => (
           <li key={s.id}>
             <a
               href={`#${s.id}`}
-              className={active === s.id ? "active" : undefined}
-              aria-current={active === s.id ? "true" : undefined}
+              role="tab"
+              aria-selected={ready && active === s.id}
+              aria-controls={s.id}
+              className={ready && active === s.id ? "active" : undefined}
+              onClick={(e) => {
+                e.preventDefault();
+                select(s.id);
+              }}
             >
               {s.label}
               {s.count !== undefined && <span className="nav-count">{s.count}</span>}

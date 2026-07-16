@@ -23,7 +23,8 @@ Búsqueda:
 - Por gen: «CFTR» lleva a la enfermedad que ese gen **causa**, no a una donde solo se
   probó como candidato
 
-Dashboard por enfermedad:
+Dashboard por enfermedad, organizado en pestañas (una sección a la vez, con todo el
+contenido en el HTML para que siga siendo indexable y funcione sin JavaScript):
 
 - **Datos clave**: herencia, edad de inicio y prevalencia, siempre con su ámbito
 - **Dónde se documenta**: prevalencia por país, agrupada por tipo de medida
@@ -31,6 +32,11 @@ Dashboard por enfermedad:
 - **Genes**: distinguiendo causantes de modificadores, con enlaces a HGNC, Ensembl,
   UniProt y los PMID que respaldan cada asociación
 - **Clasificación** navegable: dónde encaja, subtipos y enfermedades hermanas
+- **Dónde acudir**: centros que investigan la enfermedad *ahora mismo*, con su
+  promotor, su ciudad y si están reclutando — desde ClinicalTrials.gov
+- **Fármacos**: designaciones huérfanas de la EMA, con el aviso de que designación
+  no es aprobación
+- **Nombres en japonés** y designación oficial nipona, desde el registro NANDO
 
 Datos cargados:
 
@@ -45,6 +51,10 @@ Datos cargados:
 | Prevalencias | 34.216, con más de 40 áreas geográficas |
 | Herencia / edad de inicio | 40.522 atributos |
 | Jerarquía | 33 clasificaciones · 76.646 aristas |
+| Referencias cruzadas | 52.456 a 8 vocabularios (MONDO, UMLS, ICD-10/11, GARD, MeSH…) |
+| Ensayos clínicos abiertos | con sus centros y promotores |
+| Fármacos huérfanos | 3.236 designaciones de la EMA |
+| Japonés | 3.434 etiquetas · 1.794 designaciones oficiales |
 
 ## Arquitectura
 
@@ -100,6 +110,9 @@ Abrir http://localhost:3000/es y buscar `fibrosis quistica`.
 | `mr ingest orphanet --lang en,es` | Nomenclatura: nombres, sinónimos, definiciones, xrefs. |
 | `mr ingest science --lang en,es` | Genes, signos clínicos (HPO), epidemiología, herencia y edad de inicio. Incluye las traducciones oficiales de HPO. |
 | `mr ingest classifications --lang en,es` | Jerarquía por especialidad, desde el pack ya descargado. |
+| `mr ingest trials` | Ensayos abiertos, centros y promotores (ClinicalTrials.gov). Reanudable: salta lo ya cargado. |
+| `mr ingest drugs` | Designaciones de medicamento huérfano de la EMA. |
+| `mr ingest nando` | Nombres en japonés y designación nipona (NANDO). |
 | `mr index rebuild --lang es` | Reconstruye el índice desde Postgres. Seguro siempre. |
 | `mr status` | Qué hay cargado, de qué versión y desde cuándo. |
 

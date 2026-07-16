@@ -227,6 +227,29 @@ a {
   }
 }
 
+/*
+ * Pestañas: una sección a la vez.
+ *
+ * El ocultado depende de que el JS haya marcado `data-tabs-ready`. Sin JavaScript el
+ * atributo no aparece y la página se ve entera y seguida: peor, pero funciona. El
+ * contenido siempre está en el HTML, así que Google lo indexa igual.
+ */
+body[data-tabs-ready="true"] section.block[id] {
+  display: none;
+}
+
+body[data-tabs-ready="true"][data-active-section="datos-clave"] section.block#datos-clave,
+body[data-tabs-ready="true"][data-active-section="definicion"] section.block#definicion,
+body[data-tabs-ready="true"][data-active-section="geografia"] section.block#geografia,
+body[data-tabs-ready="true"][data-active-section="signos"] section.block#signos,
+body[data-tabs-ready="true"][data-active-section="genes"] section.block#genes,
+body[data-tabs-ready="true"][data-active-section="donde-acudir"] section.block#donde-acudir,
+body[data-tabs-ready="true"][data-active-section="farmacos"] section.block#farmacos,
+body[data-tabs-ready="true"][data-active-section="clasificacion"] section.block#clasificacion,
+body[data-tabs-ready="true"][data-active-section="referencias"] section.block#referencias {
+  display: block;
+}
+
 /* Compensa la cabecera pegajosa al saltar a un ancla. */
 section.block[id] {
   scroll-margin-top: 70px;
@@ -868,6 +891,120 @@ section.block h2 {
 
 .gene-table tr.gene-causing td:first-child {
   box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* ------------------------------------------------------------- dónde acudir */
+
+.trial-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.trial {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+
+.trial-head {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.trial-title {
+  display: block;
+  font-weight: 550;
+  font-size: 0.92rem;
+  margin-bottom: 6px;
+  text-decoration: none;
+}
+
+.trial-title:hover {
+  text-decoration: underline;
+}
+
+.trial-sponsor {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.trial-locations > summary {
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: var(--accent);
+}
+
+.location-list {
+  list-style: none;
+  padding: 8px 0 0 12px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.82rem;
+  border-left: 2px solid var(--border);
+  margin-top: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.location-list .facility {
+  margin-right: 6px;
+}
+
+.drug-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.drug-table th,
+.drug-table td {
+  text-align: left;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.drug-table th {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* Nombres en idiomas fuera de la interfaz (hoy, japonés desde NANDO). */
+.other-langs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+  font-size: 0.85rem;
+}
+
+.other-lang {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.other-lang-tag {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 4px;
+  flex: none;
 }
 
 .gene-list {

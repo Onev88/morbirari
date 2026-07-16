@@ -30,9 +30,10 @@ from morbirari_etl.sources.base import (
 
 PRODUCT_URL = "https://www.orphadata.com/data/xml/{lang}_{product}.xml"
 
-# product6 (genes) solo existe en inglés: los símbolos de gen son universales y
-# Orphanet no traduce los nombres.
-ENGLISH_ONLY_PRODUCTS = frozenset({"product6"})
+# Productos que solo existen (o solo tienen sentido) en inglés:
+# - product6: los símbolos de gen son universales y Orphanet no traduce los nombres.
+# - product1: son identificadores de otros vocabularios, no texto.
+ENGLISH_ONLY_PRODUCTS = frozenset({"product6", "product1"})
 
 
 def _text(el: etree._Element | None) -> str | None:
@@ -188,6 +189,57 @@ def parse_phenotypes(xml_path: Path) -> Iterator[StagedPhenotype]:
                 hpo_term_en=hpo_term,
                 frequency_id=freq_el.get("id") if freq_el is not None else None,
                 diagnostic_criteria=_text(assoc.find("DiagnosticCriteria/Name")),
+            )
+
+
+# --------------------------------------------------------------- alineamientos
+
+
+@dataclass
+class StagedAlignment:
+    orpha_code: str
+    source_ns: str
+    source_id: str
+    relation: str
+    validated: bool
+
+
+def parse_alignments(xml_path: Path) -> Iterator[StagedAlignment]:
+    """Referencias cruzadas a los demás vocabularios (product1).
+
+    Es la llave del resto del sistema, no un extra:
+    - **MeSH** permite buscar ensayos en ClinicalTrials.gov por código en lugar de por
+      texto libre, que es la diferencia entre un enlace fiable y una adivinanza.
+    - **GARD** enlaza con los textos divulgativos del NIH.
+    - MONDO y UMLS abren la puerta a reconciliar con casi cualquier otra fuente.
+
+    Verificado sobre el fichero real: 9.979 MONDO, 9.586 UMLS, 8.745 OMIM, 8.450
+    ICD-10, 6.868 ICD-11, 3.825 GARD, 3.209 MeSH, 1.794 MedDRA. Todo CC BY 4.0.
+
+    Nota de licencia: aquí solo entran identificadores. Ninguna etiqueta de OMIM.
+    """
+    from morbirari_etl.models.orphanet import ORPHANET_RELATION_MAP
+
+    context = etree.iterparse(str(xml_path), events=("end",), tag="Disorder")
+    for el in _iter_clear(context):
+        orpha_code = _text(el.find("OrphaCode"))
+        if not orpha_code:
+            continue
+        for ref in el.iterfind("ExternalReferenceList/ExternalReference"):
+            source_ns = _text(ref.find("Source"))
+            source_id = _text(ref.find("Reference"))
+            if not source_ns or not source_id:
+                continue
+            relation_name = _text(ref.find("DisorderMappingRelation/Name")) or ""
+            code = relation_name.split(" ", 1)[0].strip()
+            validation = _text(ref.find("DisorderMappingValidationStatus/Name")) or ""
+            yield StagedAlignment(
+                orpha_code=orpha_code,
+                # "ICD-10" -> "ICD10": el guion sobra y complica las consultas.
+                source_ns=source_ns.replace("-", "").upper(),
+                source_id=source_id,
+                relation=ORPHANET_RELATION_MAP.get(code, "unknown"),
+                validated=validation.lower().startswith("validated"),
             )
 
 

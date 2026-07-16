@@ -316,6 +316,161 @@ export async function getSubtypeGenes(orphaCode: string, lang: string): Promise<
   }));
 }
 
+export type TrialLocation = {
+  facility: string | null;
+  city: string | null;
+  country: string | null;
+};
+
+export type TrialRow = {
+  nctId: string;
+  title: string;
+  status: string;
+  phase: string | null;
+  leadSponsor: string | null;
+  sponsorClass: string | null;
+  locations: TrialLocation[];
+  countries: string[];
+};
+
+/**
+ * Ensayos clínicos abiertos, con sus centros.
+ *
+ * Es la respuesta libre a «¿a dónde puedo acudir?». Los centros expertos de Orphanet
+ * serían mejores, pero exigen firmar un acuerdo de transferencia de datos;
+ * ClinicalTrials.gov es público y además dice si el ensayo está reclutando.
+ */
+export async function getTrials(diseaseId: string, limit = 25): Promise<TrialRow[]> {
+  const rows = await sql<
+    {
+      nct_id: string;
+      title: string;
+      status: string;
+      phase: string | null;
+      lead_sponsor: string | null;
+      sponsor_class: string | null;
+    }[]
+  >`
+    SELECT t.nct_id, t.title, t.status, t.phase, t.lead_sponsor, t.sponsor_class
+    FROM disease_trial dt
+    JOIN trial t ON t.nct_id = dt.nct_id
+    WHERE dt.disease_id = ${diseaseId}
+    ORDER BY
+      -- Reclutando primero: es el único estado al que un paciente puede acudir hoy.
+      CASE t.status WHEN 'RECRUITING' THEN 0 WHEN 'NOT_YET_RECRUITING' THEN 1 ELSE 2 END,
+      t.last_update DESC NULLS LAST
+    LIMIT ${limit}
+  `;
+
+  if (rows.length === 0) return [];
+
+  const ids = rows.map((r) => r.nct_id);
+  const locs = await sql<
+    { nct_id: string; facility: string | null; city: string | null; country: string | null }[]
+  >`
+    SELECT nct_id, facility, city, country FROM trial_location
+    WHERE nct_id = ANY(${ids}) ORDER BY country, city
+  `;
+
+  const byTrial = new Map<string, TrialLocation[]>();
+  for (const l of locs) {
+    const list = byTrial.get(l.nct_id) ?? [];
+    list.push({ facility: l.facility, city: l.city, country: l.country });
+    byTrial.set(l.nct_id, list);
+  }
+
+  return rows.map((r) => {
+    const locations = byTrial.get(r.nct_id) ?? [];
+    return {
+      nctId: r.nct_id,
+      title: r.title,
+      status: r.status,
+      phase: r.phase,
+      leadSponsor: r.lead_sponsor,
+      sponsorClass: r.sponsor_class,
+      locations,
+      countries: [...new Set(locations.map((l) => l.country).filter((c): c is string => !!c))],
+    };
+  });
+}
+
+export type DrugRow = {
+  agency: string;
+  medicineName: string | null;
+  activeSubstance: string | null;
+  status: string | null;
+  designationDate: string | null;
+  url: string | null;
+  matchedOn: string | null;
+};
+
+/**
+ * Designaciones de medicamento huérfano.
+ *
+ * Ni la EMA ni la FDA publican códigos ORPHA, así que el vínculo lo inferimos
+ * nosotros por texto exacto. `matchedOn` guarda con qué se emparejó para que la
+ * interfaz pueda enseñarlo y el lector juzgue.
+ */
+export async function getDrugs(diseaseId: string, limit = 30): Promise<DrugRow[]> {
+  const rows = await sql<
+    {
+      agency: string;
+      medicine_name: string | null;
+      active_substance: string | null;
+      status: string | null;
+      designation_date: string | null;
+      url: string | null;
+      matched_on: string | null;
+    }[]
+  >`
+    SELECT d.agency, d.medicine_name, d.active_substance, d.status,
+           d.designation_date, d.url, dd.matched_on
+    FROM disease_drug dd
+    JOIN orphan_drug d ON d.id = dd.drug_id
+    WHERE dd.disease_id = ${diseaseId}
+    ORDER BY d.designation_date DESC NULLS LAST
+    LIMIT ${limit}
+  `;
+
+  return rows.map((r) => ({
+    agency: r.agency,
+    medicineName: r.medicine_name,
+    activeSubstance: r.active_substance,
+    status: r.status,
+    designationDate: r.designation_date,
+    url: r.url,
+    matchedOn: r.matched_on,
+  }));
+}
+
+/** Nombres en otros idiomas fuera de los que sirve la interfaz (hoy, japonés). */
+export async function getOtherLanguageLabels(
+  diseaseId: string,
+  uiLangs: string[]
+): Promise<{ lang: string; labels: string[] }[]> {
+  const rows = await sql<{ lang: string; label: string }[]>`
+    SELECT lang, label FROM disease_label
+    WHERE disease_id = ${diseaseId} AND NOT (lang = ANY(${uiLangs}))
+    ORDER BY lang, label_type
+  `;
+  const byLang = new Map<string, string[]>();
+  for (const r of rows) {
+    const list = byLang.get(r.lang) ?? [];
+    list.push(r.label);
+    byLang.set(r.lang, list);
+  }
+  return [...byLang.entries()].map(([lang, labels]) => ({ lang, labels }));
+}
+
+/** Designación oficial japonesa (nanbyo): determina la cobertura sanitaria allí. */
+export async function getJapanDesignation(diseaseId: string): Promise<string | null> {
+  const rows = await sql<{ value: string }[]>`
+    SELECT value FROM disease_attribute
+    WHERE disease_id = ${diseaseId} AND attr_type = 'jp_designation' LIMIT 1
+  `;
+  return rows[0]?.value ?? null;
+}
+
 /**
  * Dónde encaja la enfermedad y qué cuelga de ella.
  *

@@ -19,11 +19,15 @@ documento que nadie lee se desincroniza; la columna no.
 | Orphadata `product4` (signos clínicos) | CC BY 4.0 | Sí | **En uso** |
 | Orphadata `product6` (genes) | CC BY 4.0 | Sí | **En uso** |
 | Orphanet Classifications | CC BY 4.0 | Sí | **En uso** |
+| Orphadata `product1` (alineamientos) | CC BY 4.0 | Sí | **En uso** |
 | HPO translations | Custom (no SPDX) | Sí, sin alterar | **En uso** |
+| **ClinicalTrials.gov** | Dominio público EE.UU. | Sí | **En uso** |
+| **EMA** (designaciones huérfanas) | Datos abiertos | Sí | **En uso** |
+| **NANDO / NanbyoData** (Japón) | CC BY 4.0 | Sí | **En uso** |
 | MONDO | CC BY 4.0 | Sí, con matices | Pendiente |
-| GARD (NCATS/NIH) | Dominio público EE.UU. | Sí | Pendiente |
-| ClinicalTrials.gov | Dominio público EE.UU. | Sí | Pendiente |
+| GARD (NCATS/NIH) | Dominio público EE.UU. | Sí | Pendiente (ya tenemos sus IDs) |
 | PubMed | Mixto | Solo metadatos | Pendiente |
+| **Orphanet: centros expertos, asociaciones de pacientes, fármacos** | **Requiere acuerdo** | **NO sin firmar** | **Descartado** |
 | **OMIM** | **Propietario (JHU)** | **NO** | **Solo identificadores** |
 
 Verificado sobre los ficheros reales: cada XML de Orphanet declara su licencia en
@@ -72,10 +76,50 @@ marcado con condiciones especiales.
 - La aserción del loader (`assert_no_omim_text`) sigue vigente como red de seguridad por
   si alguien añade `phenotype.hpoa` en el futuro.
 
-## GARD / ClinicalTrials.gov (NIH)
+## Orphanet: los productos que NO podemos usar
+
+El directorio de **centros expertos**, **asociaciones de pacientes**, **registros** y
+**medicamentos** de Orphanet **no es de descarga libre**. Requiere firmar un Data
+Transfer Agreement (uso académico) o un contrato de servicio (uso comercial).
+
+Es el directorio más completo de Europa y sería la mejor respuesta a «¿a dónde acudo?».
+Mientras no exista ese acuerdo, esa necesidad se cubre con ClinicalTrials.gov, que es
+público. Si algún día se firma, el patrón de ingesta ya está y solo hace falta el
+adaptador.
+
+## ClinicalTrials.gov (NIH)
 
 - Obra del gobierno de EE.UU., de libre uso.
-- **Obliga a:** atribuir, y **no implicar respaldo de NIH/NCATS**.
+- **Obliga a:** atribuir y **no implicar respaldo de NIH/NCATS/NLM**. La interfaz lo
+  dice explícitamente en la sección «Dónde acudir».
+- **Ritmo:** la API responde 429 si se la aprieta. El adaptador espera 1 s entre
+  consultas y reintenta con espera creciente. Es un servicio público y gratuito.
+- **Vínculo con la enfermedad:** por código MeSH (que publica Orphanet), no por texto.
+  Es una inferencia nuestra y se marca como tal en `disease_trial.match_method`.
+
+## EMA — designaciones de medicamento huérfano
+
+- Datos abiertos, tabla actualizada a diario.
+- **No publica códigos ORPHA**: la enfermedad es texto libre («Treatment of Wilson's
+  disease»). El emparejamiento es nuestro, solo por coincidencia exacta normalizada, y
+  llega al 51%. Se prefiere perder la mitad a atribuir un fármaco a la enfermedad
+  equivocada.
+- **Aviso obligatorio en la interfaz:** una designación huérfana no es un fármaco
+  aprobado ni disponible.
+
+## NANDO / NanbyoData (Japón)
+
+- **Licencia:** CC BY 4.0. Uso libre, incluido el comercial, citando.
+- **Atribución:** NANDO (Nanbyo Disease Ontology), NanbyoData, DBCLS. https://nanbyodata.jp
+- Es la única fuente que tenemos fuera del ámbito europeo. Aporta nombres en japonés
+  (kanji e hiragana) y el número de designación oficial nipona, que allí determina la
+  cobertura sanitaria. Mapea a códigos Orphanet directamente.
+
+## GARD (NIH)
+
+- Obra del gobierno de EE.UU., de libre uso. **No implicar respaldo.**
+- Todavía no se ingiere su contenido; sí tenemos sus identificadores (3.825) vía los
+  alineamientos de Orphanet, lo que permite enlazar a sus fichas.
 
 ## PubMed
 
