@@ -1498,3 +1498,70 @@ main:focus {
 .map-hint {
   margin: 8px 0 0;
 }
+
+/* ------------------------------------------- mapa Leaflet (mejora progresiva) */
+
+/*
+ * Coroplético interactivo con Leaflet, montado encima del SVG servido. Sin tiles ni
+ * peticiones a terceros: la geometría es `world-atlas` (dominio público) y el «mapa
+ * base» es la tierra coloreada sobre el fondo-océano del contenedor. Todo el color
+ * sale de las variables del tema, así que el modo claro/oscuro se hereda sin JS.
+ */
+
+/* Lienzo de Leaflet: siempre dimensionado (aspect-ratio) para que la librería conozca
+   su tamaño al inicializarse. El fondo es el océano. */
+.leaflet-canvas {
+  width: 100%;
+  aspect-ratio: 1600 / 660;
+  background: var(--surface);
+}
+
+.prevalence-leaflet .leaflet-container {
+  background: var(--surface);
+  font-family: inherit;
+  outline: none;
+}
+
+/* Fallback SVG mientras Leaflet monta (o si no hay JS): ocupa el mismo hueco, encima
+   del lienzo. Al estar listo el mapa, `hidden` lo retira de la vista. */
+.leaflet-fallback {
+  position: absolute;
+  inset: 0;
+}
+.leaflet-fallback .prevalence-map {
+  height: 100%;
+}
+
+/* Cada país es un <path>; el relleno y el trazo los pone el className (no Leaflet),
+   igual que en el SVG servido, para heredar el tema. Leaflet solo controla el grosor. */
+.prevalence-leaflet .mr-country {
+  stroke: var(--viz-stroke);
+  fill: var(--viz-no-data);
+  cursor: pointer;
+}
+.prevalence-leaflet .mr-country.step-0 { fill: var(--seq-1); }
+.prevalence-leaflet .mr-country.step-1 { fill: var(--seq-2); }
+.prevalence-leaflet .mr-country.step-2 { fill: var(--seq-3); }
+.prevalence-leaflet .mr-country.step-3 { fill: var(--seq-4); }
+.prevalence-leaflet .mr-country.step-4 { fill: var(--seq-5); }
+.prevalence-leaflet .mr-country.step-5 { fill: var(--seq-6); }
+.prevalence-leaflet .mr-country.step-6 { fill: var(--seq-7); }
+
+/* Tooltip de Leaflet con la paleta del tema (por defecto es blanco con borde). */
+.prevalence-leaflet .leaflet-tooltip {
+  background: var(--text);
+  color: var(--bg);
+  border: none;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  font-size: 0.8rem;
+  font-weight: 550;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+.prevalence-leaflet .leaflet-tooltip-top::before {
+  border-top-color: var(--text);
+}
+.prevalence-leaflet .leaflet-tooltip-bottom::before {
+  border-bottom-color: var(--text);
+}

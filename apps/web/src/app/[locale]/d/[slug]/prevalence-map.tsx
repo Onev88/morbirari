@@ -4,7 +4,7 @@ import type { Topology } from "topojson-specification";
 import worldData from "world-atlas/countries-110m.json";
 import { alpha2ToNumeric, areaToAlpha2, localizeArea } from "@/lib/geo";
 import type { GeoPrevalence } from "@/lib/dashboard";
-import { InteractiveMap } from "./interactive-map";
+import { LeafletMap, type CountryDatum } from "./leaflet-map";
 
 /**
  * Mapa coroplético de prevalencia.
@@ -117,6 +117,16 @@ export function PrevalenceMap({ groups, lang, labels }: Props) {
 
   if (byNumeric.size === 0) return null;
 
+  // Datos que viajan al cliente: solo los países CON dato (pequeño). La geometría del
+  // resto del mundo la carga el cliente desde `world-atlas`, ya empaquetado, así que no
+  // se serializa el mapamundi entero en el HTML.
+  const countryData: CountryDatum[] = Array.from(byNumeric, ([numericId, v]) => ({
+    numericId,
+    name: v.name,
+    value: v.value,
+    step: v.step,
+  }));
+
   return (
     <figure className="map-figure">
       <figcaption className="map-caption">
@@ -139,7 +149,9 @@ export function PrevalenceMap({ groups, lang, labels }: Props) {
         interacción, que añade tooltip, zoom y desplazamiento. Sin JavaScript el mapa
         se ve igual (estático) y cada país conserva su <title> nativo.
       */}
-      <InteractiveMap
+      <LeafletMap
+        data={countryData}
+        ariaLabel={`${group.type}: ${byNumeric.size} países`}
         labels={{
           noData: labels.noData,
           zoomIn: labels.zoomIn,
@@ -177,7 +189,7 @@ export function PrevalenceMap({ groups, lang, labels }: Props) {
             })}
           </g>
         </svg>
-      </InteractiveMap>
+      </LeafletMap>
     </figure>
   );
 }
