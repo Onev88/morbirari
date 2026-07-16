@@ -39,6 +39,11 @@
     "inheritance": "Herencia",
     "ageOfOnset": "Edad de inicio",
     "prevalence": "Prevalencia",
+    "prevalenceHelp": "Cuántas personas la tienen, de forma aproximada.",
+    "prevalencePlainAbout": "≈ 1 de cada {per} personas",
+    "prevalencePlainMore": "Más de 1 de cada {per} personas",
+    "prevalencePlainLess": "Menos de 1 de cada {per} personas",
+    "prevalenceExact": "Cifra registrada",
     "noData": "Sin datos",
     "geography": "Dónde se documenta",
     "geographyIntro": "Frecuencia documentada por país o región. Refleja dónde se ha estudiado la enfermedad, no solo dónde existe: la ausencia de un país suele significar falta de estudios.",
@@ -49,6 +54,10 @@
     "geographyUnit": "por 100.000",
     "legendLow": "menos",
     "legendHigh": "más",
+    "mapZoomIn": "Acercar",
+    "mapZoomOut": "Alejar",
+    "mapReset": "Restablecer vista",
+    "mapHint": "Pasa el ratón por un país para ver su cifra. Usa la rueda o los botones para acercar y arrastra para desplazarte.",
     "phenotypes": "Signos clínicos",
     "phenotypesIntro": "Manifestaciones descritas para esta enfermedad y con qué frecuencia aparecen. Es información sobre la enfermedad, no una herramienta de diagnóstico.",
     "phenotypeCount": "{count} signos descritos",
@@ -105,11 +114,24 @@
     "source": "Fuente",
     "version": "Versión",
     "retrieved": "Recuperado el {date}",
-    "sources": "Fuentes de esta ficha"
+    "sources": "Fuentes y bibliografía",
+    "sourcesIntro": "Toda la información de esta página procede de las siguientes fuentes públicas. Cada una es responsable de sus propios datos.",
+    "src": {
+      "orphanet": "Definición, clasificación, epidemiología, genes y sinónimos",
+      "clinicalTrials": "Ensayos clínicos en curso",
+      "hpo": "Signos clínicos (Human Phenotype Ontology)",
+      "regulators": "Designaciones de fármacos huérfanos (EMA, FDA)",
+      "nando": "Denominación e identificador en Japón",
+      "identifiers": "Identificadores de genes y proteínas (HGNC, Ensembl, UniProt, OMIM)"
+    },
+    "retrievedLabel": "Datos recuperados"
   },
   "disclaimer": {
     "short": "Información de referencia. No es consejo médico ni sirve para diagnosticar.",
     "title": "Aviso importante",
+    "accept": "Entendido",
+    "reopen": "Ver el aviso importante",
+    "bannerLead": "Antes de continuar, ten esto en cuenta:",
     "notAdvice": "Morbi Rari no proporciona consejo médico y no sustituye la consulta con un profesional sanitario.",
     "noRelationship": "El uso de este sitio no crea una relación médico-paciente.",
     "noDiagnosis": "Este sitio no diagnostica. No determina qué enfermedad tiene una persona ni sugiere diagnósticos a partir de síntomas.",
@@ -119,6 +141,14 @@
   },
   "nav": {
     "language": "Idioma",
-    "home": "Inicio"
+    "home": "Inicio",
+    "skipToContent": "Saltar al contenido"
+  },
+  "theme": {
+    "label": "Tema",
+    "toggle": "Cambiar tema",
+    "light": "Claro",
+    "dark": "Oscuro",
+    "auto": "Automático"
   }
 }

@@ -17,6 +17,7 @@ import {
 import { routing } from "@/i18n/routing";
 import { sanitizeDefinition } from "@/lib/sanitize";
 import { isCountryArea, localizeArea } from "@/lib/geo";
+import { parsePrevalenceClass } from "@/lib/prevalence";
 import { PhenotypeList } from "./phenotype-list";
 import { PrevalenceMap } from "./prevalence-map";
 import { SectionNav } from "./section-nav";
@@ -103,13 +104,19 @@ export default async function DiseasePage({ params }: Props) {
   // prometer nada.
   const recruiting = trials.filter((t) => t.status === "RECRUITING");
 
+  // Prevalencia en lenguaje llano («≈ 1 de cada N personas»); la cifra exacta de la
+  // fuente se sigue enseñando aparte.
+  const prevalencePlain = parsePrevalenceClass(keyFacts.prevalenceClass);
+  const prevalencePer = prevalencePlain
+    ? new Intl.NumberFormat(locale).format(prevalencePlain.per)
+    : null;
+
   // El índice solo lista lo que existe: una sección vacía en la navegación es una
   // promesa incumplida.
   const sections = [
-    { id: "datos-clave", label: td("keyFacts") },
-    // Definición va siempre: su sección se renderiza aunque no haya texto (dice que
-    // la fuente no lo publica), así que omitirla del índice lo desalinearía con la
-    // página.
+    // Definición y datos clave, unificados: la definición abre y los datos clave
+    // (herencia, edad de inicio, prevalencia) van justo debajo, en la misma pestaña.
+    // Se renderiza siempre, aunque no haya texto de definición.
     { id: "definicion", label: t("definition") },
     ...(geography.length > 0
       ? [{ id: "geografia", label: td("geography"), count: countryCount }]
@@ -128,6 +135,9 @@ export default async function DiseasePage({ params }: Props) {
     ...(detail.xrefs.length > 0
       ? [{ id: "referencias", label: td("codes"), count: detail.xrefs.length }]
       : []),
+    // La bibliografía cierra siempre la ficha: toda página tiene, como mínimo,
+    // Orphanet como fuente.
+    { id: "fuentes", label: tProv("sources") },
   ];
 
   return (
@@ -160,10 +170,27 @@ export default async function DiseasePage({ params }: Props) {
       {detail.disease.status === "retired" && <div className="notice">{t("retired")}</div>}
       <div className="notice">{tDisc("short")}</div>
 
-      {/* Datos clave arriba: herencia, edad de inicio y prevalencia son lo que casi
-          todo el mundo quiere saber antes que nada. */}
-      <section className="block" id="datos-clave">
-        <h2>{td("keyFacts")}</h2>
+      {/* Definición + datos clave en una sola pestaña: primero qué es la enfermedad
+          y luego lo que casi todo el mundo quiere saber antes que nada — herencia,
+          edad de inicio y prevalencia. */}
+      <section className="block" id="definicion">
+        <h2>{t("definition")}</h2>
+        {detail.definition ? (
+          <>
+            {definitionFellBack && t("definitionInEnglish") && (
+              <div className="notice inline">{t("definitionInEnglish")}</div>
+            )}
+            <p
+              className="definition"
+              lang={detail.definitionLang ?? undefined}
+              dangerouslySetInnerHTML={{ __html: sanitizeDefinition(detail.definition) }}
+            />
+          </>
+        ) : (
+          <p className="hint">{t("noDefinition")}</p>
+        )}
+
+        <h3 className="subsection-title">{td("keyFacts")}</h3>
         <div className="fact-grid">
           <div className="fact">
             <div className="fact-label">{td("inheritance")}</div>
@@ -190,11 +217,29 @@ export default async function DiseasePage({ params }: Props) {
             <div className="fact-value">
               {keyFacts.prevalenceClass ? (
                 <>
-                  <div>{keyFacts.prevalenceClass}</div>
-                  {/* El ámbito va siempre: una cifra de prevalencia sin decir dónde
-                      ni qué mide no significa nada. */}
+                  {/* Lo primero, la forma legible: «≈ 1 de cada N personas». */}
+                  {prevalencePlain && prevalencePer ? (
+                    <div className="prevalence-plain">
+                      {prevalencePlain.kind === "about"
+                        ? td("prevalencePlainAbout", { per: prevalencePer })
+                        : prevalencePlain.kind === "more"
+                          ? td("prevalencePlainMore", { per: prevalencePer })
+                          : td("prevalencePlainLess", { per: prevalencePer })}
+                    </div>
+                  ) : (
+                    <div>{keyFacts.prevalenceClass}</div>
+                  )}
+                  {/* Debajo, la cifra registrada exacta y su ámbito: una cifra sin
+                      decir dónde ni qué mide no significa nada, y la aproximación no
+                      sustituye al dato de la fuente. */}
                   <div className="dim small">
-                    {[keyFacts.prevalenceArea, keyFacts.prevalenceType]
+                    {[
+                      prevalencePlain
+                        ? `${td("prevalenceExact")}: ${keyFacts.prevalenceClass}`
+                        : null,
+                      keyFacts.prevalenceArea,
+                      keyFacts.prevalenceType,
+                    ]
                       .filter(Boolean)
                       .join(" · ")}
                   </div>
@@ -227,24 +272,6 @@ export default async function DiseasePage({ params }: Props) {
         )}
       </section>
 
-      <section className="block" id="definicion">
-        <h2>{t("definition")}</h2>
-        {detail.definition ? (
-          <>
-            {definitionFellBack && t("definitionInEnglish") && (
-              <div className="notice inline">{t("definitionInEnglish")}</div>
-            )}
-            <p
-              className="definition"
-              lang={detail.definitionLang ?? undefined}
-              dangerouslySetInnerHTML={{ __html: sanitizeDefinition(detail.definition) }}
-            />
-          </>
-        ) : (
-          <p className="hint">{t("noDefinition")}</p>
-        )}
-      </section>
-
       {geography.length > 0 && (
         <section className="block" id="geografia">
           <h2>{td("geography")}</h2>
@@ -262,6 +289,10 @@ export default async function DiseasePage({ params }: Props) {
                 noData: td("noData"),
                 legendLow: td("legendLow"),
                 legendHigh: td("legendHigh"),
+                zoomIn: td("mapZoomIn"),
+                zoomOut: td("mapZoomOut"),
+                reset: td("mapReset"),
+                hint: td("mapHint"),
               }}
             />
           )}
@@ -405,7 +436,7 @@ export default async function DiseasePage({ params }: Props) {
       )}
 
       {subtypeGenes.length > 0 && (
-        <section className="block">
+        <section className="block" id="genes">
           <h2>{td("genes")}</h2>
           {/* Atribuidos a su subtipo, nunca fusionados con el padre: Orphanet no dice
               que FBN1 cause "síndrome de Marfan" a secas, sino "Marfan tipo 1". */}
@@ -641,27 +672,80 @@ export default async function DiseasePage({ params }: Props) {
         </section>
       )}
 
-      {detail.disease.expert_link && (
-        <section className="block">
-          <a href={detail.disease.expert_link} rel="noreferrer" target="_blank">
-            {t("expertLink")} →
-          </a>
-        </section>
-      )}
+      {/*
+        Bibliografía al cierre de la ficha: en vez de repartir atribuciones sueltas
+        por la página, cada fuente que ha aportado algo se lista aquí, ordenada, con
+        su enlace y qué parte de la ficha viene de ella. Solo aparece la fuente que
+        de verdad se ha usado en esta enfermedad.
+      */}
+      <section className="block" id="fuentes">
+        <h2>{tProv("sources")}</h2>
+        <p className="section-intro">{tProv("sourcesIntro")}</p>
+        <ul className="source-list">
+          <li className="source">
+            <a
+              href={detail.disease.expert_link ?? "https://www.orpha.net"}
+              rel="noreferrer"
+              target="_blank"
+            >
+              Orphanet
+            </a>
+            <span className="source-desc">{tProv("src.orphanet")}</span>
+          </li>
+          {phenotypes.length > 0 && (
+            <li className="source">
+              <a href="https://hpo.jax.org" rel="noreferrer" target="_blank">
+                Human Phenotype Ontology
+              </a>
+              <span className="source-desc">{tProv("src.hpo")}</span>
+            </li>
+          )}
+          {trials.length > 0 && (
+            <li className="source">
+              <a href="https://clinicaltrials.gov" rel="noreferrer nofollow" target="_blank">
+                ClinicalTrials.gov
+              </a>
+              <span className="source-desc">{tProv("src.clinicalTrials")}</span>
+            </li>
+          )}
+          {drugs.length > 0 && (
+            <li className="source">
+              <span className="source-name">EMA · FDA</span>
+              <span className="source-desc">{tProv("src.regulators")}</span>
+            </li>
+          )}
+          {(jpDesignation || otherLangs.some((o) => o.lang === "ja")) && (
+            <li className="source">
+              <a href="https://nanbyodata.jp" rel="noreferrer" target="_blank">
+                NANDO · NanbyoData
+              </a>
+              <span className="source-desc">{tProv("src.nando")}</span>
+            </li>
+          )}
+          {(genes.length > 0 || subtypeGenes.length > 0 || detail.xrefs.length > 0) && (
+            <li className="source">
+              <a href="https://www.genenames.org" rel="noreferrer" target="_blank">
+                HGNC · Ensembl · UniProt · OMIM
+              </a>
+              <span className="source-desc">{tProv("src.identifiers")}</span>
+            </li>
+          )}
+        </ul>
 
-      {/* La frescura, visible: señal de confianza y mitigación de responsabilidad. */}
-      <div className="provenance">
-        {detail.attribution && <p>{detail.attribution}</p>}
-        <p>
-          {detail.sourceVersion && `${tProv("version")}: ${detail.sourceVersion} · `}
-          {detail.retrievedAt &&
-            tProv("retrieved", {
-              date: new Intl.DateTimeFormat(locale, { dateStyle: "long" }).format(
-                new Date(detail.retrievedAt)
-              ),
-            })}
-        </p>
-      </div>
+        {/* La frescura, visible: señal de confianza y mitigación de responsabilidad. */}
+        <div className="provenance">
+          {detail.attribution && <p>{detail.attribution}</p>}
+          <p>
+            {detail.sourceVersion && `${tProv("version")}: ${detail.sourceVersion} · `}
+            {detail.retrievedAt &&
+              tProv("retrieved", {
+                date: new Intl.DateTimeFormat(locale, { dateStyle: "long" }).format(
+                  new Date(detail.retrievedAt)
+                ),
+              })}
+          </p>
+        </div>
+      </section>
       </div>
     </div>
   );

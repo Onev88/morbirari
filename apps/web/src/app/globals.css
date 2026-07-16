@@ -1,4 +1,5 @@
 :root {
+  color-scheme: light;
   --bg: #fbfbfa;
   --surface: #ffffff;
   --text: #1a1a1a;
@@ -43,8 +44,49 @@
   --viz-stroke: #ffffff;
 }
 
+/*
+ * Tema oscuro. Se aplica en dos casos, con los MISMOS valores (duplicados a
+ * propósito: CSS no permite compartir un bloque de declaraciones entre un selector
+ * normal y uno dentro de @media):
+ *
+ *  1. El usuario lo ha forzado con el toggle → :root[data-theme="dark"].
+ *  2. El sistema pide oscuro y el usuario NO ha forzado claro → la media query con
+ *     :not([data-theme="light"]). Así "Automático" sigue al sistema y el toggle
+ *     siempre gana.
+ */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #16171a;
+  --surface: #1e2024;
+  --text: #e8e8e6;
+  --muted: #a0a4ab;
+  --border: #32353b;
+  --accent: #7fc3dd;
+  --accent-soft: #1c2a31;
+  --warn-bg: #2a2519;
+  --warn-border: #4a412a;
+
+  --seq-1: #0d366b;
+  --seq-2: #104281;
+  --seq-3: #184f95;
+  --seq-4: #256abf;
+  --seq-5: #3987e5;
+  --seq-6: #6da7ec;
+  --seq-7: #9ec5f4;
+
+  --ord-1: #cde2fb;
+  --ord-2: #9ec5f4;
+  --ord-3: #6da7ec;
+  --ord-4: #3987e5;
+  --ord-5: #184f95;
+
+  --viz-no-data: #2a2c30;
+  --viz-stroke: #1e2024;
+}
+
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
     --bg: #16171a;
     --surface: #1e2024;
     --text: #e8e8e6;
@@ -238,7 +280,6 @@ body[data-tabs-ready="true"] section.block[id] {
   display: none;
 }
 
-body[data-tabs-ready="true"][data-active-section="datos-clave"] section.block#datos-clave,
 body[data-tabs-ready="true"][data-active-section="definicion"] section.block#definicion,
 body[data-tabs-ready="true"][data-active-section="geografia"] section.block#geografia,
 body[data-tabs-ready="true"][data-active-section="signos"] section.block#signos,
@@ -246,7 +287,8 @@ body[data-tabs-ready="true"][data-active-section="genes"] section.block#genes,
 body[data-tabs-ready="true"][data-active-section="donde-acudir"] section.block#donde-acudir,
 body[data-tabs-ready="true"][data-active-section="farmacos"] section.block#farmacos,
 body[data-tabs-ready="true"][data-active-section="clasificacion"] section.block#clasificacion,
-body[data-tabs-ready="true"][data-active-section="referencias"] section.block#referencias {
+body[data-tabs-ready="true"][data-active-section="referencias"] section.block#referencias,
+body[data-tabs-ready="true"][data-active-section="fuentes"] section.block#fuentes {
   display: block;
 }
 
@@ -1130,4 +1172,329 @@ section.block h2 {
     white-space: normal;
     max-width: 200px;
   }
+}
+
+/* ----------------------------------------------------------- accesibilidad */
+
+/*
+ * Foco visible en todo lo interactivo. Antes solo lo tenía el buscador; sin esto,
+ * quien navega con teclado no sabe dónde está. Se usa :focus-visible para no molestar
+ * a quien navega con ratón.
+ */
+a:focus-visible,
+button:focus-visible,
+summary:focus-visible,
+[role="tab"]:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Enlace de salto: fuera de pantalla hasta recibir foco con el teclado. */
+.skip-link {
+  position: absolute;
+  left: 12px;
+  top: -60px;
+  z-index: 100;
+  background: var(--accent);
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: var(--radius);
+  text-decoration: none;
+  font-size: 0.9rem;
+  transition: top 0.15s ease;
+}
+
+.skip-link:focus {
+  top: 12px;
+}
+
+/* main es el destino del salto; recibe foco programático pero sin anillo propio. */
+main:focus {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* -------------------------------------------------------- cabecera y tema */
+
+.header-tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  line-height: 1;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.theme-toggle:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.theme-icon {
+  display: inline-flex;
+}
+
+.theme-label {
+  font-weight: 550;
+}
+
+@media (max-width: 560px) {
+  .theme-label {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------- aviso legal (banner + pie) */
+
+.disclaimer-banner {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  background: var(--warn-bg);
+  border-top: 1px solid var(--warn-border);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.12);
+}
+
+.disclaimer-banner-inner {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 14px 20px;
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.disclaimer-banner-body {
+  max-width: 82ch;
+}
+
+.disclaimer-banner-title {
+  display: block;
+  font-size: 0.9rem;
+  margin-bottom: 2px;
+}
+
+.disclaimer-banner-lead {
+  margin: 0 0 6px;
+  font-size: 0.82rem;
+}
+
+.disclaimer-banner ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.disclaimer-banner li {
+  margin-bottom: 2px;
+}
+
+.disclaimer-accept {
+  flex: none;
+  padding: 10px 20px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+@media (max-width: 640px) {
+  .disclaimer-banner-inner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .disclaimer-banner-body {
+    max-height: 40vh;
+    overflow-y: auto;
+  }
+}
+
+.footer-disclaimer {
+  margin-bottom: 14px;
+}
+
+.footer-disclaimer > summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.8rem;
+  padding: 4px 0;
+  list-style-position: inside;
+}
+
+.footer-disclaimer ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.footer-disclaimer li {
+  margin-bottom: 3px;
+}
+
+.footer-attribution {
+  margin: 0;
+}
+
+/* ------------------------------------------- definición + datos clave unidos */
+
+.subsection-title {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  font-weight: 600;
+  margin: 22px 0 8px;
+}
+
+/* La forma legible de la prevalencia manda visualmente; la cifra exacta va debajo. */
+.prevalence-plain {
+  font-weight: 650;
+}
+
+/* --------------------------------------------------- bibliografía / fuentes */
+
+.source-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.source {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-left: 2px solid var(--border);
+  padding-left: 12px;
+}
+
+.source > a,
+.source-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.source-name {
+  color: var(--text);
+}
+
+.source-desc {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+/* ------------------------------------------------ mapa interactivo (zoom/pan) */
+
+.map-interactive {
+  margin: 0;
+}
+
+.map-viewport {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  /* touch-action none: el arrastre desplaza el mapa en lugar de hacer scroll. */
+  touch-action: none;
+  cursor: grab;
+}
+
+.map-viewport:active {
+  cursor: grabbing;
+}
+
+/* El marco lo pone el viewport; el SVG interior va sin borde para no duplicarlo. */
+.map-viewport .prevalence-map {
+  border: none;
+  border-radius: 0;
+}
+
+.map-tooltip {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  transform: translate(-50%, calc(-100% - 12px));
+  background: var(--text);
+  color: var(--bg);
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.map-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.map-controls button {
+  min-width: 34px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.map-controls button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.map-controls .map-reset {
+  font-size: 0.8rem;
+  font-weight: 550;
+}
+
+.map-hint {
+  margin: 8px 0 0;
 }

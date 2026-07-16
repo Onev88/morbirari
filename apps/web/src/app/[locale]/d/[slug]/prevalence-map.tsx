@@ -4,6 +4,7 @@ import type { Topology } from "topojson-specification";
 import worldData from "world-atlas/countries-110m.json";
 import { alpha2ToNumeric, areaToAlpha2, localizeArea } from "@/lib/geo";
 import type { GeoPrevalence } from "@/lib/dashboard";
+import { InteractiveMap } from "./interactive-map";
 
 /**
  * Mapa coroplético de prevalencia.
@@ -40,6 +41,10 @@ type Props = {
     noData: string;
     legendLow: string;
     legendHigh: string;
+    zoomIn: string;
+    zoomOut: string;
+    reset: string;
+    hint: string;
   };
 };
 
@@ -119,35 +124,8 @@ export function PrevalenceMap({ groups, lang, labels }: Props) {
         <span className="dim"> · {byNumeric.size}</span>
       </figcaption>
 
-      <svg
-        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-        className="prevalence-map"
-        role="img"
-        aria-label={`${group.type}: ${byNumeric.size} países`}
-        preserveAspectRatio="xMidYMid meet"
-      >
-        <g>
-          {BASE_PATHS.map((c) => {
-            const datum = byNumeric.get(c.numericId);
-            return (
-              <path
-                key={c.numericId + c.name}
-                d={c.d}
-                className={datum ? `country step-${datum.step}` : "country no-data"}
-              >
-                {/* <title> nativo: tooltip sin JavaScript y accesible. */}
-                <title>
-                  {datum
-                    ? `${datum.name}: ${datum.value.toFixed(1)}`
-                    : `${c.name}: ${labels.noData}`}
-                </title>
-              </path>
-            );
-          })}
-        </g>
-      </svg>
-
-      {/* La leyenda es obligatoria: sin ella el color no significa nada. */}
+      {/* La leyenda es obligatoria: sin ella el color no significa nada. Va sobre el
+          mapa, junto al título, para que se lea antes de mirar los países. */}
       <div className="map-legend" aria-hidden="true">
         <span className="dim small">{labels.legendLow}</span>
         <span className="legend-ramp" />
@@ -155,6 +133,51 @@ export function PrevalenceMap({ groups, lang, labels }: Props) {
           {labels.legendHigh} · {group.max.toFixed(1)}
         </span>
       </div>
+
+      {/*
+        El SVG se sirve entero desde el servidor y se pasa como children a la capa de
+        interacción, que añade tooltip, zoom y desplazamiento. Sin JavaScript el mapa
+        se ve igual (estático) y cada país conserva su <title> nativo.
+      */}
+      <InteractiveMap
+        labels={{
+          noData: labels.noData,
+          zoomIn: labels.zoomIn,
+          zoomOut: labels.zoomOut,
+          reset: labels.reset,
+          hint: labels.hint,
+        }}
+      >
+        <svg
+          viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+          className="prevalence-map"
+          role="img"
+          aria-label={`${group.type}: ${byNumeric.size} países`}
+          preserveAspectRatio="xMidYMid meet"
+        >
+          <g id="prevalence-map-layer">
+            {BASE_PATHS.map((c) => {
+              const datum = byNumeric.get(c.numericId);
+              return (
+                <path
+                  key={c.numericId + c.name}
+                  d={c.d}
+                  className={datum ? `country step-${datum.step}` : "country no-data"}
+                  data-name={datum ? datum.name : c.name}
+                  data-value={datum ? datum.value.toFixed(1) : ""}
+                >
+                  {/* <title> nativo: tooltip sin JavaScript y accesible. */}
+                  <title>
+                    {datum
+                      ? `${datum.name}: ${datum.value.toFixed(1)}`
+                      : `${c.name}: ${labels.noData}`}
+                  </title>
+                </path>
+              );
+            })}
+          </g>
+        </svg>
+      </InteractiveMap>
     </figure>
   );
 }

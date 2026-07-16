@@ -39,6 +39,11 @@
     "inheritance": "Inheritance",
     "ageOfOnset": "Age of onset",
     "prevalence": "Prevalence",
+    "prevalenceHelp": "Roughly how many people have it.",
+    "prevalencePlainAbout": "≈ 1 in {per} people",
+    "prevalencePlainMore": "More than 1 in {per} people",
+    "prevalencePlainLess": "Fewer than 1 in {per} people",
+    "prevalenceExact": "Recorded figure",
     "noData": "No data",
     "geography": "Where it is documented",
     "geographyIntro": "Reported frequency by country or region. This reflects where the disease has been studied, not only where it occurs: a missing country usually means missing studies.",
@@ -49,6 +54,10 @@
     "geographyUnit": "per 100,000",
     "legendLow": "fewer",
     "legendHigh": "more",
+    "mapZoomIn": "Zoom in",
+    "mapZoomOut": "Zoom out",
+    "mapReset": "Reset view",
+    "mapHint": "Hover a country to see its figure. Use the wheel or the buttons to zoom, and drag to pan.",
     "phenotypes": "Clinical signs",
     "phenotypesIntro": "Manifestations described for this disease and how often they appear. This is information about the disease, not a diagnostic tool.",
     "phenotypeCount": "{count} signs described",
@@ -105,11 +114,24 @@
     "source": "Source",
     "version": "Version",
     "retrieved": "Retrieved on {date}",
-    "sources": "Sources for this page"
+    "sources": "Sources and references",
+    "sourcesIntro": "All information on this page comes from the public sources below. Each is responsible for its own data.",
+    "src": {
+      "orphanet": "Definition, classification, epidemiology, genes and synonyms",
+      "clinicalTrials": "Ongoing clinical trials",
+      "hpo": "Clinical signs (Human Phenotype Ontology)",
+      "regulators": "Orphan drug designations (EMA, FDA)",
+      "nando": "Japanese name and identifier",
+      "identifiers": "Gene and protein identifiers (HGNC, Ensembl, UniProt, OMIM)"
+    },
+    "retrievedLabel": "Data retrieved"
   },
   "disclaimer": {
     "short": "Reference information. Not medical advice, and not for diagnosis.",
     "title": "Important notice",
+    "accept": "Got it",
+    "reopen": "View the important notice",
+    "bannerLead": "Before you continue, please keep this in mind:",
     "notAdvice": "Morbi Rari does not provide medical advice and is not a substitute for consulting a healthcare professional.",
     "noRelationship": "Using this site does not create a doctor-patient relationship.",
     "noDiagnosis": "This site does not diagnose. It does not determine what condition a person has, nor suggest diagnoses from symptoms.",
@@ -119,6 +141,14 @@
   },
   "nav": {
     "language": "Language",
-    "home": "Home"
+    "home": "Home",
+    "skipToContent": "Skip to content"
+  },
+  "theme": {
+    "label": "Theme",
+    "toggle": "Toggle theme",
+    "light": "Light",
+    "dark": "Dark",
+    "auto": "Auto"
   }
 }
