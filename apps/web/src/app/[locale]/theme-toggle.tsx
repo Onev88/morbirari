@@ -39,8 +39,17 @@ export function ThemeToggle({ labels }: { labels: Labels }) {
     setMounted(true);
   }, []);
 
+  /**
+   * Tema realmente aplicado ahora mismo, leído del <html> (la fuente de verdad).
+   * El atributo lo fija el script en línea del layout en la primera carga y este
+   * componente en cada clic, así que refleja el estado antes que el `state` de React.
+   */
+  function appliedTheme(): Mode {
+    const t = document.documentElement.dataset.theme;
+    return t === "light" || t === "dark" ? t : "auto";
+  }
+
   function apply(next: Mode) {
-    setMode(next);
     const root = document.documentElement;
     try {
       if (next === "auto") {
@@ -55,10 +64,17 @@ export function ThemeToggle({ labels }: { labels: Labels }) {
       if (next === "auto") delete root.dataset.theme;
       else root.dataset.theme = next;
     }
+    // El icono y la etiqueta se pintan desde el estado de React; se sincroniza al final.
+    setMode(next);
   }
 
   function cycle() {
-    apply(mode === "auto" ? "light" : mode === "light" ? "dark" : "auto");
+    // Se calcula el siguiente estado desde el tema APLICADO (DOM), no desde `mode`.
+    // `mode` puede ir un render por detrás: al pulsar rápido (o el doble clic de «no
+    // cambió, vuelvo a pulsar») `apply` ya movió el DOM pero React aún no re-renderizó,
+    // y derivar de `mode` repetía el valor anterior y dejaba el ciclo atascado.
+    const cur = appliedTheme();
+    apply(cur === "auto" ? "light" : cur === "light" ? "dark" : "auto");
   }
 
   const current = mode === "auto" ? labels.auto : mode === "light" ? labels.light : labels.dark;

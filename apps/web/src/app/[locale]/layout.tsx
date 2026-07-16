@@ -50,7 +50,11 @@ export default async function LocaleLayout({
   const tTheme = await getTranslations({ locale, namespace: "theme" });
 
   return (
-    <html lang={locale}>
+    // El script en línea de abajo fija `data-theme` en <html> antes de la hidratación,
+    // así que el atributo del cliente no coincide con el HTML del servidor a propósito.
+    // `suppressHydrationWarning` le dice a React que ese desajuste en <html> es esperado
+    // (solo afecta a este nodo, no a sus hijos) y evita el reconciliado/aviso.
+    <html lang={locale} suppressHydrationWarning>
       <body>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
 
