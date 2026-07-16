@@ -58,9 +58,11 @@ export default async function LocaleLayout({
             </div>
           </header>
 
-          <main>
-            <div className="wrap">{children}</div>
-          </main>
+          {/*
+            El ancho lo fija cada página: el buscador quiere una columna estrecha y
+            legible; la ficha necesita sitio para el mapa y las tablas.
+          */}
+          <main>{children}</main>
 
           {/*
             El disclaimer es un pie persistente, no un modal: un modal perjudica el

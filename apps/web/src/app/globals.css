@@ -9,6 +9,38 @@
   --warn-bg: #fff8e6;
   --warn-border: #e6d5a8;
   --radius: 8px;
+
+  /*
+   * Tokens de visualización.
+   *
+   * Separados del cromo de la interfaz a propósito: el color de los datos codifica
+   * magnitud y el del cromo no. Todos los valores están validados con el script
+   * validate_palette.js del proyecto contra la superficie real (#ffffff en claro,
+   * #1e2024 en oscuro) — no elegidos a ojo.
+   *
+   * Secuencial (magnitud continua: mapa de prevalencia). Un solo hue, claro→oscuro.
+   */
+  --seq-1: #cde2fb;
+  --seq-2: #9ec5f4;
+  --seq-3: #6da7ec;
+  --seq-4: #3987e5;
+  --seq-5: #2a78d6;
+  --seq-6: #1c5cab;
+  --seq-7: #104281;
+
+  /*
+   * Ordinal (frecuencia de un signo clínico: 5 niveles ordenados).
+   * Empieza en el paso 250 y no antes: por debajo, el nivel más claro no llega a
+   * 2:1 contra la superficie y deja de leerse. Lo detectó el validador.
+   */
+  --ord-1: #104281; /* obligatorio  100%   */
+  --ord-2: #1c5cab; /* muy frecuente 99-80% */
+  --ord-3: #2a78d6; /* frecuente     79-30% */
+  --ord-4: #5598e7; /* ocasional     29-5%  */
+  --ord-5: #86b6ef; /* muy poco frec. 4-1%  */
+
+  --viz-no-data: #ececea;
+  --viz-stroke: #ffffff;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -22,6 +54,25 @@
     --accent-soft: #1c2a31;
     --warn-bg: #2a2519;
     --warn-border: #4a412a;
+
+    /* Pasos elegidos para la superficie oscura y validados como conjunto, no un
+       volteo automático de los claros. */
+    --seq-1: #0d366b;
+    --seq-2: #104281;
+    --seq-3: #184f95;
+    --seq-4: #256abf;
+    --seq-5: #3987e5;
+    --seq-6: #6da7ec;
+    --seq-7: #9ec5f4;
+
+    --ord-1: #cde2fb;
+    --ord-2: #9ec5f4;
+    --ord-3: #6da7ec;
+    --ord-4: #3987e5;
+    --ord-5: #184f95;
+
+    --viz-no-data: #2a2c30;
+    --viz-stroke: #1e2024;
   }
 }
 
@@ -52,6 +103,133 @@ a {
   max-width: 780px;
   margin: 0 auto;
   padding: 0 20px;
+}
+
+/* La ficha necesita más ancho que el buscador: tiene un mapa y tablas. */
+.wrap-wide {
+  max-width: 1120px;
+}
+
+/*
+ * Dos columnas en escritorio: índice fijo + contenido.
+ * Por debajo de 940px el índice pasa a ser una tira horizontal desplazable sobre el
+ * contenido — en móvil una columna lateral robaría el ancho que necesita el mapa.
+ */
+.disease-layout {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 36px;
+  align-items: start;
+}
+
+/* minmax(0,…) en ambas: por defecto un elemento de grid no encoge por debajo del
+   ancho de su contenido, y basta una tabla ancha para provocar scroll horizontal en
+   toda la página. */
+@media (max-width: 940px) {
+  .disease-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+}
+
+.disease-main {
+  min-width: 0;
+}
+
+.section-nav {
+  position: sticky;
+  top: 20px;
+}
+
+.section-nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.section-nav a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  text-decoration: none;
+  color: var(--muted);
+  border-left: 2px solid transparent;
+}
+
+.section-nav a:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.section-nav a.active {
+  color: var(--accent);
+  font-weight: 600;
+  border-left-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.nav-count {
+  margin-left: auto;
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.section-nav a.active .nav-count {
+  color: var(--accent);
+}
+
+@media (max-width: 940px) {
+  .section-nav {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--bg);
+    margin: 0 -20px 16px;
+    padding: 8px 20px;
+    border-bottom: 1px solid var(--border);
+    /* Sin esto, el elemento de grid crece hasta el ancho de su contenido (la tira de
+       enlaces) y arrastra a toda la página a un scroll horizontal. */
+    min-width: 0;
+  }
+
+  .section-nav ul {
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 4px;
+    scrollbar-width: none;
+  }
+
+  .section-nav ul::-webkit-scrollbar {
+    display: none;
+  }
+
+  .section-nav a {
+    white-space: nowrap;
+    border-left: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 6px 6px 0 0;
+  }
+
+  .section-nav a.active {
+    border-left-color: transparent;
+    border-bottom-color: var(--accent);
+  }
+
+  .nav-count {
+    margin-left: 4px;
+  }
+}
+
+/* Compensa la cabecera pegajosa al saltar a un ancla. */
+section.block[id] {
+  scroll-margin-top: 70px;
 }
 
 .site-header {
@@ -399,6 +577,69 @@ section.block h2 {
   line-height: 1.4;
 }
 
+/* ------------------------------------------------------- mapa de prevalencia */
+
+.map-figure {
+  margin: 0 0 20px;
+}
+
+.map-caption {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+
+.prevalence-map {
+  width: 100%;
+  height: auto;
+  display: block;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.prevalence-map .country {
+  /* Un filo del color de la superficie separa países contiguos: sin él, dos vecinos
+     del mismo paso se leen como una sola mancha. */
+  stroke: var(--viz-stroke);
+  stroke-width: 0.4;
+  fill: var(--viz-no-data);
+}
+
+.prevalence-map .country:hover {
+  stroke: var(--text);
+  stroke-width: 0.8;
+}
+
+.prevalence-map .step-0 { fill: var(--seq-1); }
+.prevalence-map .step-1 { fill: var(--seq-2); }
+.prevalence-map .step-2 { fill: var(--seq-3); }
+.prevalence-map .step-3 { fill: var(--seq-4); }
+.prevalence-map .step-4 { fill: var(--seq-5); }
+.prevalence-map .step-5 { fill: var(--seq-6); }
+.prevalence-map .step-6 { fill: var(--seq-7); }
+
+.map-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.legend-ramp {
+  flex: 0 1 140px;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(
+    to right,
+    var(--seq-1),
+    var(--seq-3),
+    var(--seq-5),
+    var(--seq-7)
+  );
+}
+
 .geo-group {
   margin-bottom: 18px;
 }
@@ -467,20 +708,72 @@ section.block h2 {
 }
 
 .pheno-group {
-  margin-bottom: 14px;
+  margin-bottom: 16px;
+}
+
+.pheno-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+/* La muestra ata el grupo a la escala ordinal. Sin ella el color no dice nada. */
+.swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex: none;
+}
+
+.swatch.ord-1 { background: var(--ord-1); }
+.swatch.ord-2 { background: var(--ord-2); }
+.swatch.ord-3 { background: var(--ord-3); }
+.swatch.ord-4 { background: var(--ord-4); }
+.swatch.ord-5 { background: var(--ord-5); }
+.swatch.ord-none {
+  background: transparent;
+  border: 1px solid var(--muted);
 }
 
 .pheno-freq {
   font-size: 0.78rem;
   font-weight: 600;
-  color: var(--accent);
-  margin-bottom: 6px;
+  color: var(--text);
 }
+
+.pheno-count {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.pheno-bar-track {
+  flex: 1;
+  max-width: 120px;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.pheno-bar {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+}
+
+.pheno-bar.ord-1 { background: var(--ord-1); }
+.pheno-bar.ord-2 { background: var(--ord-2); }
+.pheno-bar.ord-3 { background: var(--ord-3); }
+.pheno-bar.ord-4 { background: var(--ord-4); }
+.pheno-bar.ord-5 { background: var(--ord-5); }
+.pheno-bar.ord-none { background: var(--muted); }
 
 .pheno-list {
   list-style: none;
   padding: 0;
-  margin: 0;
+  margin: 0 0 0 18px;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -502,6 +795,13 @@ section.block h2 {
   color: var(--accent);
 }
 
+/* Un signo excluido está tachado: se lee como "no ocurre" sin depender del color. */
+.pheno-list li a.excluded {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--muted);
+}
+
 .link-button {
   background: none;
   border: none;
@@ -511,6 +811,63 @@ section.block h2 {
   padding: 4px 0;
   font-family: inherit;
   text-decoration: underline;
+}
+
+/* Tabla plegable de datos: el detalle exacto, a un clic y sin ocupar la página. */
+.data-table-details {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 0 12px;
+  margin-top: 12px;
+}
+
+.data-table-details > summary {
+  cursor: pointer;
+  padding: 8px 0;
+  font-size: 0.82rem;
+  color: var(--accent);
+  list-style-position: inside;
+}
+
+.data-table-details[open] > summary {
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
+}
+
+.data-table-details > *:last-child {
+  margin-bottom: 12px;
+}
+
+.gene-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.gene-table th,
+.gene-table td {
+  text-align: left;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.gene-table th {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* El gen causante es la fila que importa: se marca con un filo, no solo con color. */
+.gene-table tr.gene-causing {
+  background: var(--accent-soft);
+}
+
+.gene-table tr.gene-causing td:first-child {
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .gene-list {
@@ -621,5 +978,19 @@ section.block h2 {
 
   .geo-table .dim.small {
     display: none;
+  }
+
+  /* Una tabla ancha se desplaza dentro de su caja; la página nunca se desplaza en
+     horizontal. */
+  .gene-table,
+  .xref-table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  .gene-table .gene-name {
+    white-space: normal;
+    max-width: 200px;
   }
 }

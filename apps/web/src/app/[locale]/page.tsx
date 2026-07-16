@@ -20,7 +20,7 @@ export default async function SearchPage({ params, searchParams }: Props) {
     : { hits: [], degraded: false };
 
   return (
-    <>
+    <div className="wrap">
       {/* Un formulario GET simple: sin JavaScript de cliente, la búsqueda es
           enlazable y compartible, y funciona sin cookies. */}
       <form className="search-form" action={`/${locale}`} method="get" role="search">
@@ -77,6 +77,6 @@ export default async function SearchPage({ params, searchParams }: Props) {
       <p className="hint" style={{ marginTop: 32 }}>
         {tDisc("short")}
       </p>
-    </>
+    </div>
   );
 }

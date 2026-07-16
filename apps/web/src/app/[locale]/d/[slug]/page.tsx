@@ -11,7 +11,10 @@ import {
   getSubtypeGenes,
 } from "@/lib/dashboard";
 import { sanitizeDefinition } from "@/lib/sanitize";
+import { isCountryArea, localizeArea } from "@/lib/geo";
 import { PhenotypeList } from "./phenotype-list";
+import { PrevalenceMap } from "./prevalence-map";
+import { SectionNav } from "./section-nav";
 
 type Props = {
   params: Promise<{ locale: string; slug: string }>;
@@ -72,9 +75,38 @@ export default async function DiseasePage({ params }: Props) {
 
   const definitionFellBack = detail.definition && detail.definitionLang !== locale;
   const untranslatedTerms = phenotypes.some((p) => !p.isTranslated);
+  const countryCount = new Set(
+    geography.flatMap((g) => g.rows.map((r) => r.area).filter(isCountryArea))
+  ).size;
+
+  // El índice solo lista lo que existe: una sección vacía en la navegación es una
+  // promesa incumplida.
+  const sections = [
+    { id: "datos-clave", label: td("keyFacts") },
+    // Definición va siempre: su sección se renderiza aunque no haya texto (dice que
+    // la fuente no lo publica), así que omitirla del índice lo desalinearía con la
+    // página.
+    { id: "definicion", label: t("definition") },
+    ...(geography.length > 0
+      ? [{ id: "geografia", label: td("geography"), count: countryCount }]
+      : []),
+    ...(phenotypes.length > 0
+      ? [{ id: "signos", label: td("phenotypes"), count: phenotypes.length }]
+      : []),
+    ...(genes.length > 0 || subtypeGenes.length > 0
+      ? [{ id: "genes", label: td("genes"), count: genes.length || subtypeGenes.length }]
+      : []),
+    ...(classifications.length > 0 ? [{ id: "clasificacion", label: td("classification") }] : []),
+    ...(detail.xrefs.length > 0
+      ? [{ id: "referencias", label: td("codes"), count: detail.xrefs.length }]
+      : []),
+  ];
 
   return (
-    <>
+    <div className="wrap wrap-wide disease-layout">
+      <SectionNav sections={sections} />
+
+      <div className="disease-main">
       <a className="back-link" href={`/${locale}`}>
         ← {t("backToSearch")}
       </a>
@@ -102,7 +134,7 @@ export default async function DiseasePage({ params }: Props) {
 
       {/* Datos clave arriba: herencia, edad de inicio y prevalencia son lo que casi
           todo el mundo quiere saber antes que nada. */}
-      <section className="block">
+      <section className="block" id="datos-clave">
         <h2>{td("keyFacts")}</h2>
         <div className="fact-grid">
           <div className="fact">
@@ -147,7 +179,7 @@ export default async function DiseasePage({ params }: Props) {
         </div>
       </section>
 
-      <section className="block">
+      <section className="block" id="definicion">
         <h2>{t("definition")}</h2>
         {detail.definition ? (
           <>
@@ -166,51 +198,77 @@ export default async function DiseasePage({ params }: Props) {
       </section>
 
       {geography.length > 0 && (
-        <section className="block">
+        <section className="block" id="geografia">
           <h2>{td("geography")}</h2>
           {/* Este matiz importa: sin él, un mapa de prevalencia se lee como "aquí no
               existe la enfermedad" cuando en realidad dice "aquí nadie la ha estudiado". */}
           <p className="section-intro">{td("geographyIntro")}</p>
-          {/* Un bloque por tipo de medida. Mezclar prevalencia al nacer con
-              prevalencia puntual en una sola tabla ordenada por valor haría que la
-              barra comparase magnitudes que no son comparables. */}
-          {geography.map((group) => (
-            <div key={group.type} className="geo-group">
-              <div className="geo-type">
-                {group.type}
-                <span className="dim"> · {group.rows.length}</span>
+
+          {/* El mapa solo cuando hay bastantes países. Con dos o tres, un mapamundi
+              es 117 KB de HTML para decir menos que una barra. */}
+          {countryCount >= 4 && (
+            <PrevalenceMap
+              groups={geography}
+              lang={locale}
+              labels={{
+                noData: td("noData"),
+                legendLow: td("legendLow"),
+                legendHigh: td("legendHigh"),
+              }}
+            />
+          )}
+
+          {/*
+            La tabla no desaparece: es la lectura exacta, funciona sin color y es lo
+            que recorre un lector de pantalla. Pero va plegada cuando hay mapa —
+            ocupaba 2.500 px y repetía lo que el mapa ya cuenta. Si no hay mapa, la
+            tabla ES la visualización y se muestra abierta.
+          */}
+          <details className="data-table-details" open={countryCount < 4}>
+            <summary>
+              {td("showTable")}
+              <span className="dim"> · {geography.reduce((a, g) => a + g.rows.length, 0)}</span>
+            </summary>
+            {geography.map((group) => (
+              <div key={group.type} className="geo-group">
+                <div className="geo-type">
+                  {group.type}
+                  <span className="dim"> · {group.rows.length}</span>
+                </div>
+                <table className="geo-table">
+                  <tbody>
+                    {group.rows.map((g) => (
+                      <tr key={`${group.type}-${g.area}`}>
+                        <td>
+                          {/* Orphanet deja los países en inglés incluso en los ficheros
+                              en español; se traducen vía su código ISO. */}
+                          {localizeArea(g.area, locale)}
+                          {g.validated && (
+                            <span className="tick" title={td("geographyValidated")}> ✓</span>
+                          )}
+                        </td>
+                        <td className="num">
+                          <div className="bar-cell">
+                            <span className="bar-value">{g.value.toFixed(1)}</span>
+                            <span
+                              className="bar"
+                              style={{ width: `${(g.value / group.max) * 100}%` }}
+                              aria-hidden="true"
+                            />
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <table className="geo-table">
-                <tbody>
-                  {group.rows.map((g) => (
-                    <tr key={`${group.type}-${g.area}`}>
-                      <td>
-                        {g.area}
-                        {g.validated && (
-                          <span className="tick" title={td("geographyValidated")}> ✓</span>
-                        )}
-                      </td>
-                      <td className="num">
-                        <div className="bar-cell">
-                          <span className="bar-value">{g.value.toFixed(1)}</span>
-                          <span
-                            className="bar"
-                            style={{ width: `${(g.value / group.max) * 100}%` }}
-                            aria-hidden="true"
-                          />
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ))}
+            ))}
+          </details>
         </section>
       )}
 
       {phenotypes.length > 0 && (
-        <section className="block">
+        <section className="block" id="signos">
           <h2>{td("phenotypes")}</h2>
           <p className="section-intro">{td("phenotypesIntro")}</p>
           {untranslatedTerms && td("termInEnglish") && (
@@ -228,49 +286,73 @@ export default async function DiseasePage({ params }: Props) {
               unknown: td("frequency.unknown"),
             }}
             showAllLabel={td("showAllPhenotypes", { count: phenotypes.length })}
+            showLessLabel={td("showLessPhenotypes")}
           />
         </section>
       )}
 
       {genes.length > 0 && (
-        <section className="block">
+        <section className="block" id="genes">
           <h2>{td("genes")}</h2>
           {/* Distinguir causante de modificador no es un adorno: decir que 19 genes
               "causan" la fibrosis quística cuando solo CFTR lo hace sería falso. */}
           <p className="section-intro">{td("genesIntro")}</p>
-          <ul className="gene-list">
-            {genes.map((g) => {
-              const causing = g.associationType?.toLowerCase().includes("disease-causing");
-              const candidate = g.associationType?.toLowerCase().includes("candidate");
-              return (
-                <li key={g.symbol} className="gene">
-                  <div className="gene-head">
-                    <span className="gene-symbol">{g.symbol}</span>
-                    <span className={`badge ${causing ? "" : "neutral"}`}>
-                      {causing
-                        ? td("geneCausing")
-                        : candidate
-                          ? td("geneCandidate")
-                          : td("geneModifier")}
-                    </span>
-                  </div>
-                  {g.name && <div className="gene-name" lang="en">{g.name}</div>}
-                  <div className="gene-links">
-                    {g.hgncId && <a href={HGNC_URL(g.hgncId)} rel="noreferrer" target="_blank">HGNC</a>}
-                    {g.ensemblId && <a href={ENSEMBL_URL(g.ensemblId)} rel="noreferrer" target="_blank">Ensembl</a>}
-                    {g.uniprotId && <a href={UNIPROT_URL(g.uniprotId)} rel="noreferrer" target="_blank">UniProt</a>}
-                    {/* Solo el número MIM y un enlace. Nunca el texto de OMIM. */}
-                    {g.omimId && <a href={OMIM_URL(g.omimId)} rel="noreferrer nofollow" target="_blank">OMIM {g.omimId}</a>}
-                    {g.pmids?.map((p) => (
-                      <a key={p} href={PUBMED_URL(p)} rel="noreferrer" target="_blank" className="pmid">
-                        PMID {p}
-                      </a>
-                    ))}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+          {/*
+            Tabla y no tarjetas: hay enfermedades con más de cien genes, y una tarjeta
+            por gen convertía la sección en 2.000 px de scroll. En una tabla, el gen
+            causante se localiza de un vistazo y los modificadores quedan como lista
+            recorrible. La fila causante va destacada — es la distinción que importa.
+          */}
+          <table className="gene-table">
+            <thead>
+              <tr>
+                <th>{td("geneSymbol")}</th>
+                <th>{td("geneRole")}</th>
+                <th>{td("geneLinks")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {genes.map((g) => {
+                const causing = g.associationType?.toLowerCase().includes("disease-causing");
+                const candidate = g.associationType?.toLowerCase().includes("candidate");
+                return (
+                  <tr key={g.symbol} className={causing ? "gene-causing" : undefined}>
+                    <td>
+                      <span className="gene-symbol">{g.symbol}</span>
+                      {g.name && (
+                        <div className="gene-name" lang="en">
+                          {g.name}
+                        </div>
+                      )}
+                    </td>
+                    <td>
+                      <span className={`badge ${causing ? "" : "neutral"}`}>
+                        {causing
+                          ? td("geneCausing")
+                          : candidate
+                            ? td("geneCandidate")
+                            : td("geneModifier")}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="gene-links">
+                        {g.hgncId && <a href={HGNC_URL(g.hgncId)} rel="noreferrer" target="_blank">HGNC</a>}
+                        {g.ensemblId && <a href={ENSEMBL_URL(g.ensemblId)} rel="noreferrer" target="_blank">Ensembl</a>}
+                        {g.uniprotId && <a href={UNIPROT_URL(g.uniprotId)} rel="noreferrer" target="_blank">UniProt</a>}
+                        {/* Solo el número MIM y un enlace. Nunca el texto de OMIM. */}
+                        {g.omimId && <a href={OMIM_URL(g.omimId)} rel="noreferrer nofollow" target="_blank">OMIM</a>}
+                        {g.pmids?.map((p) => (
+                          <a key={p} href={PUBMED_URL(p)} rel="noreferrer" target="_blank" className="pmid">
+                            PMID
+                          </a>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </section>
       )}
 
@@ -314,7 +396,7 @@ export default async function DiseasePage({ params }: Props) {
       )}
 
       {classifications.length > 0 && (
-        <section className="block">
+        <section className="block" id="clasificacion">
           <h2>{td("classification")}</h2>
           <p className="section-intro">{td("classificationIntro")}</p>
           {classifications.map((c) => (
@@ -350,7 +432,7 @@ export default async function DiseasePage({ params }: Props) {
       )}
 
       {detail.xrefs.length > 0 && (
-        <section className="block">
+        <section className="block" id="referencias">
           <h2>{t("xrefs")}</h2>
           <table className="xref-table">
             <thead>
@@ -405,6 +487,7 @@ export default async function DiseasePage({ params }: Props) {
             })}
         </p>
       </div>
-    </>
+      </div>
+    </div>
   );
 }
