@@ -349,3 +349,277 @@ section.block h2 {
   margin-bottom: 20px;
   text-decoration: none;
 }
+
+/* ---------------------------------------------------------------- dashboard */
+
+.dim {
+  color: var(--muted);
+}
+
+.small {
+  font-size: 0.8rem;
+}
+
+.num {
+  text-align: right;
+}
+
+.section-intro {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: 0 0 12px;
+  max-width: 62ch;
+}
+
+.fact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.fact {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+
+.fact-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.fact-value {
+  font-size: 0.95rem;
+  font-weight: 550;
+  line-height: 1.4;
+}
+
+.geo-group {
+  margin-bottom: 18px;
+}
+
+.geo-type {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+
+.geo-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.geo-table th,
+.geo-table td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.geo-table th {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.geo-table th.num,
+.geo-table td.num {
+  text-align: right;
+}
+
+.tick {
+  color: var(--accent);
+}
+
+.bar-cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 120px;
+}
+
+.bar-value {
+  font-variant-numeric: tabular-nums;
+  z-index: 1;
+}
+
+/* La barra es comparativa dentro de la ficha, no una escala absoluta: las medidas
+   mezclan incidencia y prevalencia, así que solo sirve para ver el orden relativo. */
+.bar {
+  display: block;
+  height: 6px;
+  background: var(--accent);
+  opacity: 0.28;
+  border-radius: 3px;
+  min-width: 2px;
+  max-width: 90px;
+}
+
+.pheno-group {
+  margin-bottom: 14px;
+}
+
+.pheno-freq {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+
+.pheno-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pheno-list li a {
+  display: inline-block;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  padding: 3px 10px;
+  border-radius: 99px;
+  font-size: 0.85rem;
+  text-decoration: none;
+  color: var(--text);
+}
+
+.pheno-list li a:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.link-button {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 4px 0;
+  font-family: inherit;
+  text-decoration: underline;
+}
+
+.gene-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gene {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+}
+
+.gene-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gene-symbol {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  font-weight: 650;
+  font-size: 0.95rem;
+}
+
+.gene-name {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin: 2px 0 6px;
+}
+
+.gene-from {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.gene-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 0.78rem;
+}
+
+.gene-links a {
+  text-decoration: none;
+}
+
+.gene-links a:hover {
+  text-decoration: underline;
+}
+
+.gene-links .pmid {
+  color: var(--muted);
+}
+
+.classification {
+  border-left: 2px solid var(--border);
+  padding-left: 14px;
+  margin-bottom: 14px;
+}
+
+.classification-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.rel-group {
+  margin-bottom: 6px;
+}
+
+.rel-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.rel-list {
+  list-style: none;
+  padding: 0;
+  margin: 2px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 0.88rem;
+}
+
+.rel-list a {
+  text-decoration: none;
+}
+
+.rel-list a:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 560px) {
+  .fact-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .geo-table .dim.small {
+    display: none;
+  }
+}

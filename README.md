@@ -14,13 +14,37 @@ busca por código OMIM va a otra fuente distinta. Morbi Rari es el punto de entr
 
 ## Estado
 
-**Fase 1 funcionando**: Orphanet (EN + ES) ingerido, indexado y consultable.
+**Buscador y dashboard funcionando**, con Orphanet completo en EN + ES.
 
-- 11.645 enfermedades · ~53.000 etiquetas en dos idiomas · 8.745 referencias cruzadas
-  · ~6.900 definiciones por idioma
-- Búsqueda tolerante a erratas y sin acentos: «fibrosis quistika» encuentra
-  *Fibrosis quística*
-- Búsqueda por identificador: «OMIM:219700» o «219700» encuentran *Cystic fibrosis*
+Búsqueda:
+
+- Tolerante a erratas y sin acentos: «fibrosis quistika» encuentra *Fibrosis quística*
+- Por identificador: «OMIM:219700» o «219700» encuentran *Cystic fibrosis*
+- Por gen: «CFTR» lleva a la enfermedad que ese gen **causa**, no a una donde solo se
+  probó como candidato
+
+Dashboard por enfermedad:
+
+- **Datos clave**: herencia, edad de inicio y prevalencia, siempre con su ámbito
+- **Dónde se documenta**: prevalencia por país, agrupada por tipo de medida
+- **Signos clínicos**: 116.626 anotaciones HPO con frecuencia, traducidas al español
+- **Genes**: distinguiendo causantes de modificadores, con enlaces a HGNC, Ensembl,
+  UniProt y los PMID que respaldan cada asociación
+- **Clasificación** navegable: dónde encaja, subtipos y enfermedades hermanas
+
+Datos cargados:
+
+| | |
+|---|---|
+| Enfermedades | 11.645 (10.101 activas) |
+| Etiquetas | 52.897 en dos idiomas |
+| Definiciones | ~6.900 por idioma |
+| Signos clínicos | 116.626 sobre 4.357 enfermedades |
+| Términos HPO | 8.758, **100% traducidos** al español |
+| Genes | 4.623 · 8.473 asociaciones |
+| Prevalencias | 34.216, con más de 40 áreas geográficas |
+| Herencia / edad de inicio | 40.522 atributos |
+| Jerarquía | 33 clasificaciones · 76.646 aristas |
 
 ## Arquitectura
 
@@ -54,9 +78,10 @@ python -m venv .venv
 ./.venv/Scripts/python.exe -m pip install -e ".[dev]"   # Linux/macOS: .venv/bin/python
 ./.venv/Scripts/python.exe -m alembic upgrade head
 
-# 3. Ingerir e indexar (~2 min desde cero: descarga ~17 MB de Orphanet,
-#    parsea 2 XML de 21 MB y carga 11.645 enfermedades)
-./.venv/Scripts/python.exe -m morbirari_etl ingest orphanet --lang en,es
+# 3. Ingerir e indexar (~6 min desde cero en total)
+./.venv/Scripts/python.exe -m morbirari_etl ingest orphanet --lang en,es         # nomenclatura
+./.venv/Scripts/python.exe -m morbirari_etl ingest science --lang en,es          # genes, HPO, epidemiología
+./.venv/Scripts/python.exe -m morbirari_etl ingest classifications --lang en,es  # jerarquía
 ./.venv/Scripts/python.exe -m morbirari_etl index rebuild --lang en,es
 ./.venv/Scripts/python.exe -m morbirari_etl status
 
@@ -72,10 +97,33 @@ Abrir http://localhost:3000/es y buscar `fibrosis quistica`.
 
 | Comando | Qué hace |
 |---|---|
-| `mr ingest orphanet --lang en,es` | Ingiere el Nomenclature Pack. Salta si el checksum no cambió. |
-| `mr ingest orphanet --force` | Reingiere aunque no haya cambios. |
+| `mr ingest orphanet --lang en,es` | Nomenclatura: nombres, sinónimos, definiciones, xrefs. |
+| `mr ingest science --lang en,es` | Genes, signos clínicos (HPO), epidemiología, herencia y edad de inicio. Incluye las traducciones oficiales de HPO. |
+| `mr ingest classifications --lang en,es` | Jerarquía por especialidad, desde el pack ya descargado. |
 | `mr index rebuild --lang es` | Reconstruye el índice desde Postgres. Seguro siempre. |
 | `mr status` | Qué hay cargado, de qué versión y desde cuándo. |
+
+Todos los `ingest` saltan el trabajo si el checksum del origen no ha cambiado. Añade
+`--force` para reingerir de todos modos.
+
+## Fuentes de datos
+
+Todo lo de arriba sale de Orphanet (CC BY 4.0), salvo una excepción con motivo:
+
+| Producto | Aporta | Idiomas |
+|---|---|---|
+| Nomenclature Pack | nombres, sinónimos, definiciones, ICD/OMIM | 9 |
+| `product9_prev` | prevalencia por área geográfica | EN + ES |
+| `product9_ages` | herencia, edad de inicio | EN + ES |
+| `product4` | signos clínicos (HPO) con frecuencia | EN + ES |
+| `product6` | genes y sus referencias externas | solo EN |
+| Classifications | jerarquía por especialidad médica | 9 |
+| `hpo-translations` | **traducción de los términos HPO** | varios |
+
+La excepción es `hpo-translations`: Orphanet publica las anotaciones de fenotipo en
+9 idiomas pero **no traduce los términos HPO** — en `es_product4` el síntoma sigue
+siendo «Macrocephaly». Las traducciones oficiales vienen del proyecto HPO. Sin ellas,
+el modo español mostraría los signos clínicos en inglés.
 
 ## Tests
 

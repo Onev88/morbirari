@@ -13,6 +13,7 @@ from morbirari_etl.config import ACTIVE_LANGS, VALIDATION_FAILURE_THRESHOLD
 from morbirari_etl.db import Disease, DiseaseLabel, DiseaseXref, IngestRun, Source, get_sessionmaker
 from morbirari_etl.indexers import meilisearch as mi
 from morbirari_etl.loaders import postgres as pg
+from morbirari_etl.sources.hpo import translations as hpo_tr
 from morbirari_etl.sources.orphanet import nomenclature as orphanet
 
 app = typer.Typer(help="Morbi Rari — ingesta e indexación de fuentes de enfermedades raras")
@@ -100,6 +101,165 @@ def ingest_orphanet(
                         pg.finish_run(err_session, err_run, "failed", None, str(exc))
                         err_session.commit()
                 console.print(f"  [red]{lang_code}: FALLO[/red] {exc}")
+                raise typer.Exit(1) from exc
+
+
+@ingest_app.command("science")
+def ingest_science(
+    lang: str = typer.Option(",".join(ACTIVE_LANGS), help="Idiomas separados por comas"),
+    force: bool = typer.Option(False, help="Reingerir aunque el checksum no haya cambiado"),
+) -> None:
+    """Ingiere los Orphanet Scientific Knowledge Files (CC BY 4.0).
+
+    Epidemiología con geografía, historia natural, signos clínicos y genes: lo que
+    convierte la ficha en un dashboard.
+    """
+    from morbirari_etl.loaders import science as sci_loader
+    from morbirari_etl.sources.orphanet import science as sci
+
+    langs = tuple(x.strip() for x in lang.split(",") if x.strip())
+    Session = get_sessionmaker()
+
+    # (producto, etiqueta, ¿por idioma?)
+    products = [
+        ("product9_prev", "epidemiología", True),
+        ("product9_ages", "historia natural", True),
+        ("product4", "signos clínicos", True),
+        ("product6", "genes", False),
+    ]
+
+    for product, label, per_lang in products:
+        target_langs = langs if per_lang else ("en",)
+        for lang_code in target_langs:
+            console.print(f"[bold]{label}[/bold] · {product} · {lang_code}")
+            artifact = sci.fetch_product(product, lang_code, force=force)
+
+            with Session() as session:
+                if (
+                    pg.has_successful_run_for_sha(session, f"orphanet-{product}", artifact.sha256)
+                    and not force
+                ):
+                    console.print(f"  [dim]sin cambios (sha {artifact.sha256[:12]}), se salta[/dim]")
+                    continue
+
+                extraction_date, license_spdx = sci.read_meta(artifact.path)
+                source = pg.upsert_source(
+                    session,
+                    name=f"orphanet-{product}",
+                    license_spdx=license_spdx,
+                    attribution_text=orphanet.ATTRIBUTION,
+                    homepage="https://www.orphadata.com",
+                    redistributable=(license_spdx or "").upper().startswith("CC-BY"),
+                )
+                run = pg.start_run(session, source, artifact.sha256, extraction_date)
+                prov = pg.make_provenance(session, source, run, extraction_date, artifact.source_url)
+
+                try:
+                    index = sci_loader.disease_ids_by_orpha(session)
+                    counts: dict[str, int] = {}
+
+                    if product == "product9_prev":
+                        counts["prevalencias"] = sci_loader.load_epidemiology(
+                            session, sci.parse_epidemiology(artifact.path), lang_code, prov, index
+                        )
+                    elif product == "product9_ages":
+                        counts["atributos"] = sci_loader.load_attributes(
+                            session, sci.parse_natural_history(artifact.path), lang_code, prov, index
+                        )
+                    elif product == "product4":
+                        terms, assoc = sci_loader.load_phenotypes(
+                            session, sci.parse_phenotypes(artifact.path), prov, index
+                        )
+                        counts["terminos_hpo"] = terms
+                        counts["anotaciones"] = assoc
+                    elif product == "product6":
+                        genes, assoc = sci_loader.load_genes(
+                            session, sci.parse_genes(artifact.path), prov, index
+                        )
+                        counts["genes"] = genes
+                        counts["asociaciones"] = assoc
+
+                    pg.finish_run(session, run, "success", counts)
+                    session.commit()
+                    detalle = " · ".join(f"{v} {k}" for k, v in counts.items())
+                    console.print(f"  [green]OK[/green] {detalle}")
+                except Exception as exc:  # noqa: BLE001
+                    session.rollback()
+                    console.print(f"  [red]FALLO[/red] {exc}")
+                    raise typer.Exit(1) from exc
+
+    # Los términos HPO llegan en inglés aunque el producto sea es_product4: Orphanet
+    # no los traduce. Las traducciones oficiales van aparte.
+    for lang_code in langs:
+        if lang_code == "en" or lang_code not in hpo_tr.AVAILABLE_LANGS:
+            continue
+        console.print(f"[bold]traducciones HPO[/bold] · {lang_code}")
+        artifact = hpo_tr.fetch(lang_code, force=force)
+        if artifact is None:
+            continue
+
+        with Session() as session:
+            if pg.has_successful_run_for_sha(session, hpo_tr.SOURCE_NAME, artifact.sha256) and not force:
+                console.print("  [dim]sin cambios, se salta[/dim]")
+                continue
+
+            source = pg.upsert_source(
+                session,
+                name=hpo_tr.SOURCE_NAME,
+                license_spdx=None,  # HPO usa licencia propia, sin identificador SPDX
+                attribution_text=hpo_tr.ATTRIBUTION,
+                homepage="https://hpo.jax.org",
+                redistributable=True,
+            )
+            run = pg.start_run(session, source, artifact.sha256, None)
+            prov = pg.make_provenance(session, source, run, None, artifact.source_url)
+            try:
+                n = sci_loader.load_phenotype_translations(session, hpo_tr.parse(artifact), prov)
+                pg.finish_run(session, run, "success", {"traducciones": n})
+                session.commit()
+                console.print(f"  [green]OK[/green] {n} términos traducidos")
+            except Exception as exc:  # noqa: BLE001
+                session.rollback()
+                console.print(f"  [red]FALLO[/red] {exc}")
+                raise typer.Exit(1) from exc
+
+
+@ingest_app.command("classifications")
+def ingest_classifications(
+    lang: str = typer.Option(",".join(ACTIVE_LANGS), help="Idiomas separados por comas"),
+    force: bool = typer.Option(False, help="Reingerir aunque el checksum no haya cambiado"),
+) -> None:
+    """Ingiere la jerarquía de clasificaciones desde el Nomenclature Pack ya descargado."""
+    from morbirari_etl.loaders import science as sci_loader
+    from morbirari_etl.sources.orphanet import classifications as cl
+
+    langs = tuple(x.strip() for x in lang.split(",") if x.strip())
+    Session = get_sessionmaker()
+    artifacts = orphanet.fetch(langs=langs, force=False)
+
+    for lang_code, artifact in zip(langs, artifacts):
+        console.print(f"[bold]clasificaciones[/bold] · {lang_code}")
+        with Session() as session:
+            source = pg.upsert_source(
+                session,
+                name="orphanet-classifications",
+                license_spdx="CC-BY-4.0",
+                attribution_text=orphanet.ATTRIBUTION,
+                homepage="https://www.orpha.net",
+                redistributable=True,
+            )
+            run = pg.start_run(session, source, artifact.sha256, None)
+            prov = pg.make_provenance(session, source, run, None, artifact.source_url)
+            try:
+                n_class, n_edges = sci_loader.load_classifications(
+                    session, cl.parse_all(artifact.path, lang_code), prov
+                )
+                pg.finish_run(session, run, "success", {"clasificaciones": n_class, "aristas": n_edges})
+                session.commit()
+                console.print(f"  [green]OK[/green] {n_class} clasificaciones · {n_edges} aristas")
+            except Exception as exc:  # noqa: BLE001
+                session.rollback()
+                console.print(f"  [red]FALLO[/red] {exc}")
                 raise typer.Exit(1) from exc
 
 

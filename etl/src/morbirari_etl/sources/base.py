@@ -9,6 +9,7 @@ hacer. Esa es toda la historia de idempotencia.
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator, Protocol
@@ -66,6 +67,28 @@ def download(url: str, dest: Path) -> Path:
 
 def raw_path(source: str, version: str, filename: str) -> Path:
     return RAW_DIR / source / version / filename
+
+
+def version_from_fingerprint(etag: str | None, last_modified: str | None) -> str:
+    """Deriva un nombre de versión usable como directorio, a partir de la huella HTTP.
+
+    Se prefiere Last-Modified porque da una fecha legible ("2026-07-02"). Si no lo
+    hay, se cae al ETag, que hay que sanear: GitHub devuelve ETags débiles con la
+    forma `W/"abc123"`, y tanto la barra como las comillas son ilegales en nombres de
+    fichero en Windows.
+    """
+    if last_modified:
+        from email.utils import parsedate_to_datetime
+
+        try:
+            return parsedate_to_datetime(last_modified).date().isoformat()
+        except (TypeError, ValueError):
+            pass
+    if etag:
+        safe = re.sub(r"[^A-Za-z0-9._-]", "", etag)
+        if safe:
+            return safe[:32]
+    return "unknown"
 
 
 class Source(Protocol):

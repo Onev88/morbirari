@@ -30,6 +30,7 @@ from morbirari_etl.sources.base import (
     raw_path,
     remote_fingerprint,
     sha256_file,
+    version_from_fingerprint,
 )
 
 SOURCE_NAME = "orphanet"
@@ -95,7 +96,7 @@ def fetch(langs: tuple[str, ...] = ACTIVE_LANGS, force: bool = False) -> list[Ra
         url = PACK_URL.format(LANG=lang.upper())
         etag, last_modified = remote_fingerprint(url)
         # La huella remota nombra el directorio: artefactos direccionados por contenido.
-        version = _version_from_fingerprint(etag, last_modified)
+        version = version_from_fingerprint(etag, last_modified)
         dest = raw_path(SOURCE_NAME, version, f"Orphanet_Nomenclature_Pack_{lang.upper()}.zip")
 
         if dest.exists() and not force:
@@ -114,20 +115,6 @@ def fetch(langs: tuple[str, ...] = ACTIVE_LANGS, force: bool = False) -> list[Ra
             )
         )
     return artifacts
-
-
-def _version_from_fingerprint(etag: str | None, last_modified: str | None) -> str:
-    if last_modified:
-        # "Thu, 02 Jul 2026 07:06:46 GMT" -> "2026-07-02"
-        from email.utils import parsedate_to_datetime
-
-        try:
-            return parsedate_to_datetime(last_modified).date().isoformat()
-        except (TypeError, ValueError):
-            pass
-    if etag:
-        return etag.strip('"').replace("/", "_")[:32]
-    return "unknown"
 
 
 def _extract_member(zip_path: Path, pattern: re.Pattern[str]) -> Path | None:

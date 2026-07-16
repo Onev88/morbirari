@@ -119,6 +119,234 @@ class Disease(Base):
     __table_args__ = (Index("ix_disease_status", "status"),)
 
 
+class Gene(Base):
+    """Un gen. Los símbolos HGNC son universales, así que no llevan idioma.
+
+    Orphanet no traduce los nombres de gen: `name` queda en inglés siempre.
+    """
+
+    __tablename__ = "gene"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol: Mapped[str] = mapped_column(String(32), unique=True)
+    name: Mapped[str | None] = mapped_column(Text)
+    gene_type: Mapped[str | None] = mapped_column(String(64))
+    hgnc_id: Mapped[str | None] = mapped_column(String(32))
+    ensembl_id: Mapped[str | None] = mapped_column(String(32))
+    uniprot_id: Mapped[str | None] = mapped_column(String(32))
+    # Identificador MIM del gen: un número desnudo es un hecho. Nunca su texto.
+    omim_id: Mapped[str | None] = mapped_column(String(16))
+    synonyms: Mapped[list | None] = mapped_column(JSONB)
+
+    __table_args__ = (Index("ix_gene_symbol", "symbol"),)
+
+
+class DiseaseGene(Base):
+    """Asociación enfermedad-gen, con el tipo de relación y su respaldo.
+
+    `source_pmids` guarda los PMID con que Orphanet respalda la asociación: es lo que
+    convierte un dato en algo verificable en vez de una afirmación.
+    """
+
+    __tablename__ = "disease_gene"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    disease_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("disease.id", ondelete="CASCADE"), index=True
+    )
+    gene_id: Mapped[int] = mapped_column(ForeignKey("gene.id", ondelete="CASCADE"), index=True)
+    association_type: Mapped[str | None] = mapped_column(String(128))
+    association_status: Mapped[str | None] = mapped_column(String(64))
+    source_pmids: Mapped[list | None] = mapped_column(JSONB)
+    provenance_id: Mapped[int | None] = mapped_column(
+        ForeignKey("provenance.id", ondelete="SET NULL")
+    )
+
+    gene: Mapped[Gene] = relationship()
+
+    __table_args__ = (UniqueConstraint("disease_id", "gene_id", name="uq_disease_gene"),)
+
+
+class Phenotype(Base):
+    """Término HPO. El label canónico es el inglés que publica Orphanet."""
+
+    __tablename__ = "phenotype"
+
+    hpo_id: Mapped[str] = mapped_column(String(16), primary_key=True)
+    label_en: Mapped[str] = mapped_column(Text)
+
+
+class PhenotypeLabel(Base):
+    """Traducción oficial de un término HPO.
+
+    Orphanet publica las anotaciones de fenotipo pero NO traduce los términos HPO:
+    en `es_product4` el término sigue siendo "Macrocephaly". Las traducciones vienen
+    del proyecto oficial hpo-translations (obophenotype/hpo-translations), que sí las
+    publica revisadas. Sin esto, el modo español mostraría los síntomas en inglés.
+    """
+
+    __tablename__ = "phenotype_label"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    hpo_id: Mapped[str] = mapped_column(
+        ForeignKey("phenotype.hpo_id", ondelete="CASCADE"), index=True
+    )
+    lang: Mapped[str] = mapped_column(String(8), index=True)
+    label: Mapped[str] = mapped_column(Text)
+    translation_status: Mapped[str | None] = mapped_column(String(32))
+    provenance_id: Mapped[int | None] = mapped_column(
+        ForeignKey("provenance.id", ondelete="SET NULL")
+    )
+
+    __table_args__ = (UniqueConstraint("hpo_id", "lang", name="uq_phenotype_label"),)
+
+
+# Ids de frecuencia de Orphanet -> orden de presentación. Los ids son estables entre
+# versiones; el texto no (cambia con el idioma). Ordenar por el texto sería frágil.
+# Un id desconocido cae a rank NULL y se muestra al final, en vez de romper.
+HPO_FREQUENCY_RANK: dict[str, int] = {
+    "28405": 1,  # Obligate (100%)
+    "28412": 2,  # Very frequent (99-80%)
+    "28419": 3,  # Frequent (79-30%)
+    "28426": 4,  # Occasional (29-5%)
+    "28433": 5,  # Very rare (<4-1%)
+    "28440": 6,  # Excluded (0%)
+}
+
+
+class DiseasePhenotype(Base):
+    """Signo clínico asociado a una enfermedad, con su frecuencia.
+
+    Esto describe la enfermedad; no diagnostica a nadie. La búsqueda inversa
+    (síntomas -> enfermedades) está restringida por el ADR 0002.
+    """
+
+    __tablename__ = "disease_phenotype"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    disease_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("disease.id", ondelete="CASCADE"), index=True
+    )
+    hpo_id: Mapped[str] = mapped_column(
+        ForeignKey("phenotype.hpo_id", ondelete="CASCADE"), index=True
+    )
+    frequency_id: Mapped[str | None] = mapped_column(String(16))
+    frequency_rank: Mapped[int | None] = mapped_column(Integer)
+    diagnostic_criteria: Mapped[str | None] = mapped_column(String(64))
+    provenance_id: Mapped[int | None] = mapped_column(
+        ForeignKey("provenance.id", ondelete="SET NULL")
+    )
+
+    phenotype: Mapped[Phenotype] = relationship()
+
+    __table_args__ = (
+        UniqueConstraint("disease_id", "hpo_id", name="uq_disease_phenotype"),
+        Index("ix_disease_phenotype_rank", "disease_id", "frequency_rank"),
+    )
+
+
+class Epidemiology(Base):
+    """Prevalencia con su ámbito geográfico.
+
+    Orphanet publica cada dato de prevalencia atado a un área (Mundial, Europa,
+    España, Japón…) y a veces a una población concreta. Guardar solo un número
+    global perdería justo lo interesante: dónde se documenta la enfermedad.
+    """
+
+    __tablename__ = "epidemiology"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    disease_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("disease.id", ondelete="CASCADE"), index=True
+    )
+    lang: Mapped[str] = mapped_column(String(8), index=True)
+    # id estable de Orphanet, para poder cruzar idiomas sin depender del texto
+    orphanet_prevalence_id: Mapped[str] = mapped_column(String(16))
+    prevalence_type: Mapped[str | None] = mapped_column(String(64))
+    prevalence_qualification: Mapped[str | None] = mapped_column(String(64))
+    prevalence_class: Mapped[str | None] = mapped_column(String(64))
+    val_moy: Mapped[str | None] = mapped_column(String(32))
+    geographic_area: Mapped[str | None] = mapped_column(String(128))
+    validation_status: Mapped[str | None] = mapped_column(String(32))
+    source: Mapped[str | None] = mapped_column(Text)
+    provenance_id: Mapped[int | None] = mapped_column(
+        ForeignKey("provenance.id", ondelete="SET NULL")
+    )
+
+    __table_args__ = (
+        UniqueConstraint("orphanet_prevalence_id", "lang", name="uq_epidemiology"),
+        Index("ix_epidemiology_geo", "geographic_area"),
+    )
+
+
+class DiseaseAttribute(Base):
+    """Atributos multivalor y traducidos: herencia y edad de inicio.
+
+    Van juntos en una tabla porque comparten forma exacta (lista de términos
+    traducidos por enfermedad) y porque Orphanet los publica en el mismo producto.
+    """
+
+    __tablename__ = "disease_attribute"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    disease_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("disease.id", ondelete="CASCADE"), index=True
+    )
+    lang: Mapped[str] = mapped_column(String(8), index=True)
+    attr_type: Mapped[str] = mapped_column(String(32))  # inheritance | age_of_onset
+    orphanet_attr_id: Mapped[str] = mapped_column(String(16))
+    value: Mapped[str] = mapped_column(String(128))
+    provenance_id: Mapped[int | None] = mapped_column(
+        ForeignKey("provenance.id", ondelete="SET NULL")
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "disease_id", "lang", "attr_type", "orphanet_attr_id", name="uq_disease_attribute"
+        ),
+    )
+
+
+class Classification(Base):
+    """Una de las ~33 clasificaciones de Orphanet, por especialidad médica."""
+
+    __tablename__ = "classification"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    orpha_root: Mapped[str] = mapped_column(String(16))
+    lang: Mapped[str] = mapped_column(String(8))
+    name: Mapped[str] = mapped_column(Text)
+    provenance_id: Mapped[int | None] = mapped_column(
+        ForeignKey("provenance.id", ondelete="SET NULL")
+    )
+
+    __table_args__ = (UniqueConstraint("orpha_root", "lang", name="uq_classification"),)
+
+
+class ClassificationEdge(Base):
+    """Arista padre->hijo dentro de una clasificación.
+
+    Se guarda por código ORPHA y no por disease_id porque los árboles incluyen nodos
+    de agrupación que pueden no estar en `disease`. Resolver a disease_id al consultar
+    mantiene la ingesta simple y tolerante a huecos.
+    """
+
+    __tablename__ = "classification_edge"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    classification_id: Mapped[int] = mapped_column(
+        ForeignKey("classification.id", ondelete="CASCADE"), index=True
+    )
+    parent_orpha: Mapped[str | None] = mapped_column(String(16), index=True)
+    child_orpha: Mapped[str] = mapped_column(String(16), index=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "classification_id", "parent_orpha", "child_orpha", name="uq_classification_edge"
+        ),
+    )
+
+
 class DiseaseLabel(Base):
     """La columna vertebral multiidioma. La tabla de mayor valor del sistema."""
 

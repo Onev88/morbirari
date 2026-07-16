@@ -17,7 +17,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from morbirari_etl.config import MEILI_MASTER_KEY, MEILI_URL
-from morbirari_etl.db import Disease, DiseaseContent, DiseaseLabel, DiseaseXref
+from morbirari_etl.db import (
+    Disease,
+    DiseaseContent,
+    DiseaseGene,
+    DiseaseLabel,
+    DiseaseXref,
+    Gene,
+)
 
 INDEX_PREFIX = "diseases"
 
@@ -27,6 +34,11 @@ SEARCHABLE_ATTRIBUTES = [
     "preferred_label",
     "abbreviations",
     "synonyms",
+    # Los genes causantes van en su propio atributo, por delante del resto de genes.
+    # Buscar "CFTR" debe llevar a la fibrosis quística (que ese gen causa) y no a una
+    # enfermedad donde CFTR solo se probó como candidato.
+    "causing_genes",
+    "gene_symbols",
     "xref_ids",
     "definition",
 ]
@@ -97,8 +109,9 @@ def configure_index(client: meilisearch.Client, lang: str) -> None:
                 "enabled": True,
                 "minWordSizeForTypos": {"oneTypo": 5, "twoTypos": 9},
                 # Aplicar difuso a un identificador devuelve basura con aires de
-                # certeza: "OMIM:219700" no debe casar con "OMIM:219701".
-                "disableOnAttributes": ["xref_ids"],
+                # certeza: "OMIM:219700" no debe casar con "OMIM:219701", ni "CFTR"
+                # con "CFTR2".
+                "disableOnAttributes": ["xref_ids", "gene_symbols", "causing_genes"],
             },
             "pagination": {"maxTotalHits": 1000},
         }
@@ -132,6 +145,27 @@ def build_documents(session: Session, lang: str) -> Iterable[dict[str, Any]]:
         )
     ).scalars():
         defs_by_disease.setdefault(ct.disease_id, {})[ct.lang] = ct.body
+
+    # Los símbolos de gen son una vía de entrada real: un clínico busca "CFTR" igual
+    # que busca "fibrosis quística".
+    #
+    # Se separan causantes del resto por una razón concreta de ranking: Meilisearch
+    # evalúa `exactness` sobre el atributo completo, y trata un array como un campo
+    # concatenado. Con todos los genes en un solo atributo, la fibrosis quística
+    # (19 genes) puntuaba `matchesStart` para "CFTR" mientras una enfermedad con
+    # CFTR como único gen candidato puntuaba `exactMatch` y ganaba. Con los causantes
+    # en su propio atributo, ['CFTR'] vuelve a ser coincidencia exacta ahí, y ese
+    # atributo pesa más.
+    causing_by_disease: dict[Any, list[str]] = {}
+    other_genes_by_disease: dict[Any, list[str]] = {}
+    for disease_id, symbol, assoc_type in session.execute(
+        select(DiseaseGene.disease_id, Gene.symbol, DiseaseGene.association_type).join(
+            Gene, Gene.id == DiseaseGene.gene_id
+        )
+    ):
+        causing = "disease-causing" in (assoc_type or "").lower()
+        bucket = causing_by_disease if causing else other_genes_by_disease
+        bucket.setdefault(disease_id, []).append(symbol)
 
     for disease in diseases:
         labels = labels_by_disease.get(disease.id, [])
@@ -170,6 +204,8 @@ def build_documents(session: Session, lang: str) -> Iterable[dict[str, Any]]:
             "xref_ids": [x.source_id for x in xrefs]
             + [f"{x.source_ns}:{x.source_id}" for x in xrefs],
             "xref_ns": sorted({x.source_ns for x in xrefs}),
+            "causing_genes": sorted(causing_by_disease.get(disease.id, [])),
+            "gene_symbols": sorted(other_genes_by_disease.get(disease.id, [])),
             "definition": definition,
             "has_definition": definition is not None,
             "disease_type": disease.disease_type,

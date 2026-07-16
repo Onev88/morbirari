@@ -13,13 +13,23 @@ documento que nadie lee se desincroniza; la columna no.
 
 | Fuente | Licencia | ¿Redistribuible? | Estado |
 |---|---|---|---|
-| Orphanet / Orphadata / ORDO | CC BY 4.0 | Sí | En uso (Fase 1) |
-| MONDO | CC BY 4.0 | Sí, con matices | Fase 3 |
-| HPO | Custom (no SPDX) | Sí, sin alterar | Fase 2+ |
-| GARD (NCATS/NIH) | Dominio público EE.UU. | Sí | Fase 3 |
-| ClinicalTrials.gov | Dominio público EE.UU. | Sí | Fase 4 |
-| PubMed | Mixto | Solo metadatos | Fase 4 |
+| Orphanet Nomenclature Pack | CC BY 4.0 | Sí | **En uso** |
+| Orphadata `product9_prev` (epidemiología) | CC BY 4.0 | Sí | **En uso** |
+| Orphadata `product9_ages` (historia natural) | CC BY 4.0 | Sí | **En uso** |
+| Orphadata `product4` (signos clínicos) | CC BY 4.0 | Sí | **En uso** |
+| Orphadata `product6` (genes) | CC BY 4.0 | Sí | **En uso** |
+| Orphanet Classifications | CC BY 4.0 | Sí | **En uso** |
+| HPO translations | Custom (no SPDX) | Sí, sin alterar | **En uso** |
+| MONDO | CC BY 4.0 | Sí, con matices | Pendiente |
+| GARD (NCATS/NIH) | Dominio público EE.UU. | Sí | Pendiente |
+| ClinicalTrials.gov | Dominio público EE.UU. | Sí | Pendiente |
+| PubMed | Mixto | Solo metadatos | Pendiente |
 | **OMIM** | **Propietario (JHU)** | **NO** | **Solo identificadores** |
+
+Verificado sobre los ficheros reales: cada XML de Orphanet declara su licencia en
+`<Availability><Licence>`, y el ingestor la lee de ahí para poblar `source.license_spdx`
+en vez de fiarse de esta tabla. Ninguno de los productos de Orphadata que usamos está
+marcado con condiciones especiales.
 
 ---
 
@@ -49,10 +59,18 @@ documento que nadie lee se desincroniza; la columna no.
 - **Licencia:** propia, sin identificador SPDX (OBO Foundry la lista literalmente como `hpo`).
 - **Obliga a:** citar al HPO Consortium y **no alterar el contenido ni las relaciones
   lógicas**. Se almacena verbatim; nunca se sintetizan aristas padre/hijo propias.
-- **⚠️ Trampa de OMIM:** el fichero `phenotype.hpoa` tiene una columna `disease_name` y,
-  en las filas `OMIM:xxxxxx`, ese valor **es el título preferido de OMIM**, protegido por
-  copyright. Al parsear se descarta ese campo para las filas `OMIM:`. Esto está
-  implementado como aserción dura en el loader, no como convención.
+- **Qué usamos:** solo `babelon/hp-{lang}.babelon.tsv` del repositorio
+  `obophenotype/hpo-translations`, que contiene **términos HPO traducidos y nada más**.
+  Hace falta porque Orphanet publica las anotaciones de fenotipo en 9 idiomas pero no
+  traduce los términos: en `es_product4` el síntoma sigue siendo «Macrocephaly».
+- **⚠️ Trampa de OMIM — qué NO usamos:** el fichero `phenotype.hpoa` tiene una columna
+  `disease_name` y, en las filas `OMIM:xxxxxx`, ese valor **es el título preferido de
+  OMIM**, protegido por copyright. **No ingerimos `phenotype.hpoa`**: las anotaciones de
+  fenotipo salen del producto propio de Orphanet (CC BY), que las trae con la misma
+  información y sin ese campo. El fichero de traducciones no contiene datos de
+  enfermedades, así que no arrastra el problema.
+- La aserción del loader (`assert_no_omim_text`) sigue vigente como red de seguridad por
+  si alguien añade `phenotype.hpoa` en el futuro.
 
 ## GARD / ClinicalTrials.gov (NIH)
 
