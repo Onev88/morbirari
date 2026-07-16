@@ -387,6 +387,30 @@ class DiseaseTrial(Base):
     __table_args__ = (UniqueConstraint("disease_id", "nct_id", name="uq_disease_trial"),)
 
 
+class TrialQuery(Base):
+    """Cuándo se preguntó por última vez a ClinicalTrials.gov por una enfermedad.
+
+    Registra la consulta, no el resultado. La diferencia importa: sin esta tabla, «ya
+    consultada» solo podía deducirse de tener ensayos cargados, así que las ~1.966
+    enfermedades con MeSH y sin ensayos abiertos se volvían a consultar en cada
+    reanudación. Un «no hay nada» también es una respuesta, y hay que recordarla.
+
+    `queried_at` caduca a propósito: los ensayos abren y cierran, de modo que una
+    respuesta vieja deja de valer y `--refresh-after` decide cuándo.
+    """
+
+    __tablename__ = "trial_query"
+
+    disease_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("disease.id", ondelete="CASCADE"), primary_key=True
+    )
+    mesh_id: Mapped[str] = mapped_column(String(32))
+    queried_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+    trials_found: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class OrphanDrug(Base):
     """Designación de medicamento huérfano de una agencia reguladora.
 

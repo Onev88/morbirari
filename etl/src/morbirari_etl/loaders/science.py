@@ -7,6 +7,7 @@ silencio: es señal de que la nomenclatura va desfasada, no un motivo para rompe
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from typing import Iterable, Iterator
 
 from sqlalchemy import select
@@ -35,6 +36,7 @@ from morbirari_etl.db import (
     Provenance,
     Trial,
     TrialLocation,
+    TrialQuery,
 )
 from morbirari_etl.loaders.postgres import assert_no_omim_text
 from morbirari_etl.sources.clinicaltrials.trials import StagedTrial
@@ -686,24 +688,28 @@ def load_orphan_drugs(
 
 
 def mesh_ids_by_disease(
-    session: Session, skip_existing: bool = False
+    session: Session, fresh_for_days: int | None = None
 ) -> list[tuple[object, str, str]]:
     """(disease_id, orpha_code, mesh_id) de las enfermedades con MeSH publicado.
 
-    `skip_existing` deja fuera las que ya tienen ensayos cargados, lo que hace la
+    `fresh_for_days` deja fuera las consultadas hace menos de ese plazo, lo que hace la
     ingesta reanudable. Importa: son ~3.200 peticiones a una API ajena, y un proceso
     interrumpido a la mitad no debe obligar a empezar de cero ni a machacar a la
     fuente repitiendo trabajo hecho.
+
+    El filtro mira la consulta (`trial_query`), no el resultado (`disease_trial`): una
+    enfermedad sin ensayos abiertos ya se preguntó y no hay por qué volver a preguntar.
     """
     stmt = (
         select(Disease.id, Disease.orpha_code, DiseaseXref.source_id)
         .join(DiseaseXref, DiseaseXref.disease_id == Disease.id)
         .where(DiseaseXref.source_ns == "MESH", Disease.status == "active")
     )
-    if skip_existing:
+    if fresh_for_days is not None:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=fresh_for_days)
         stmt = stmt.where(
-            ~select(DiseaseTrial.id)
-            .where(DiseaseTrial.disease_id == Disease.id)
+            ~select(TrialQuery.disease_id)
+            .where(TrialQuery.disease_id == Disease.id, TrialQuery.queried_at >= cutoff)
             .exists()
         )
     rows = session.execute(stmt.order_by(Disease.orpha_code)).all()
@@ -815,6 +821,27 @@ def link_disease_organizations(
         .on_conflict_do_nothing(constraint="uq_disease_organization")
     )
     return len(values)
+
+
+def record_trial_query(session: Session, disease_id, mesh_id: str, trials_found: int) -> None:
+    """Anota que se preguntó por esta enfermedad, con o sin resultado."""
+    session.execute(
+        insert(TrialQuery)
+        .values(
+            disease_id=disease_id,
+            mesh_id=mesh_id,
+            queried_at=datetime.now(timezone.utc),
+            trials_found=trials_found,
+        )
+        .on_conflict_do_update(
+            index_elements=["disease_id"],
+            set_={
+                "mesh_id": mesh_id,
+                "queried_at": datetime.now(timezone.utc),
+                "trials_found": trials_found,
+            },
+        )
+    )
 
 
 def load_classifications(

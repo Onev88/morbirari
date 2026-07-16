@@ -339,7 +339,10 @@ def ingest_nando(force: bool = typer.Option(False, help="Reingerir aunque no hay
 def ingest_trials(
     limit: int = typer.Option(0, help="Máximo de enfermedades a consultar (0 = todas)"),
     resume: bool = typer.Option(
-        True, help="Saltar las enfermedades que ya tienen ensayos cargados"
+        True, help="Saltar las enfermedades consultadas hace poco (ver --refresh-after)"
+    ),
+    refresh_after: int = typer.Option(
+        30, help="Días tras los que una consulta caduca y la enfermedad se vuelve a consultar"
     ),
     only: str = typer.Option("", help="Códigos ORPHA concretos, separados por comas"),
 ) -> None:
@@ -357,19 +360,20 @@ def ingest_trials(
 
     Session = get_sessionmaker()
 
+    fresh_for_days = refresh_after if resume and not only else None
+
     with Session() as session:
-        targets = sci_loader.mesh_ids_by_disease(session, skip_existing=resume and not only)
+        targets = sci_loader.mesh_ids_by_disease(session, fresh_for_days=fresh_for_days)
 
     if only:
         wanted = {c.strip() for c in only.split(",") if c.strip()}
-        with Session() as session:
-            targets = [t for t in sci_loader.mesh_ids_by_disease(session) if t[1] in wanted]
+        targets = [t for t in targets if t[1] in wanted]
     if limit:
         targets = targets[:limit]
 
     console.print(
         f"[bold]ClinicalTrials.gov[/bold] · {len(targets)} enfermedades por consultar"
-        + (" (reanudando)" if resume and not only else "")
+        + (f" (reanudando, caducidad {refresh_after} d)" if fresh_for_days is not None else "")
     )
     if not targets:
         console.print("  [dim]nada que hacer[/dim]")
@@ -411,15 +415,20 @@ def ingest_trials(
                     console.print(f"  [yellow]ORPHA {orpha_code} ({mesh_id}): {exc}[/yellow]")
                 continue
 
-            if not trials:
-                continue
-
+            # La consulta se anota siempre que la fuente responda, aunque no haya nada:
+            # «sin ensayos abiertos» es una respuesta y así no se vuelve a preguntar.
+            # Solo un error queda sin anotar, porque ahí no sabemos qué hay.
             with Session() as session:
-                prov_obj = session.get(Provenance, prov_id)
-                n = sci_loader.load_trials(session, trials, disease_id, mesh_id, prov_obj)
+                n = 0
+                if trials:
+                    prov_obj = session.get(Provenance, prov_id)
+                    n = sci_loader.load_trials(session, trials, disease_id, mesh_id, prov_obj)
+                sci_loader.record_trial_query(session, disease_id, mesh_id, len(trials))
                 session.commit()
-            total_trials += n
-            with_trials += 1
+
+            if trials:
+                total_trials += n
+                with_trials += 1
 
             if i % 200 == 0:
                 console.print(
