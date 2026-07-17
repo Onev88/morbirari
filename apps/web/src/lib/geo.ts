@@ -81,3 +81,8 @@ export function localizeArea(area: string, lang: string): string {
 export function alpha2ToNumeric(alpha2: string): string | null {
   return countries.alpha2ToNumeric(alpha2) ?? null;
 }
+
+/** Nombre traducido de un país a partir de su código ISO alpha-2. */
+export function countryName(alpha2: string, lang: string): string {
+  return countries.getName(alpha2, lang) ?? alpha2;
+}

@@ -17,11 +17,13 @@ import {
 } from "@/lib/dashboard";
 import { routing } from "@/i18n/routing";
 import { sanitizeDefinition } from "@/lib/sanitize";
-import { isCountryArea, localizeArea } from "@/lib/geo";
+import { areaToAlpha2, countryName, isCountryArea, localizeArea } from "@/lib/geo";
+import { CONTINENTS, ISO2_TO_CONTINENT } from "@/lib/continents";
 import { parsePrevalenceClass } from "@/lib/prevalence";
 import { PhenotypeList } from "./phenotype-list";
 import { PrevalenceMap } from "./prevalence-map";
 import { SectionNav } from "./section-nav";
+import { TrialList, type TrialFilterGroup, type TrialVM } from "./trial-list";
 
 type Props = {
   params: Promise<{ locale: string; slug: string }>;
@@ -109,6 +111,7 @@ export default async function DiseasePage({ params }: Props) {
   const td = await getTranslations("dashboard");
   const tProv = await getTranslations("provenance");
   const tDisc = await getTranslations("disclaimer");
+  const tSearch = await getTranslations("search");
 
   const definitionFellBack = detail.definition && detail.definitionLang !== locale;
   const untranslatedTerms = phenotypes.some((p) => !p.isTranslated);
@@ -124,6 +127,46 @@ export default async function DiseasePage({ params }: Props) {
   // Feed de actividad reciente: se compone de los ensayos y designaciones ya cargados,
   // ordenados por fecha. No es una fuente nueva ni una consulta extra (ADR 0005).
   const activity = buildRecentActivity(trials, drugs);
+
+  // Vista de los ensayos para el filtro por lugar: cada uno con sus códigos ISO (para
+  // filtrar en cliente) y sus nombres de país ya localizados (para pintar). La geografía
+  // se resuelve aquí, en el servidor, para no llevar la librería de países al cliente.
+  const trialVMs: TrialVM[] = trials.map((tr) => ({
+    nctId: tr.nctId,
+    title: tr.title,
+    status: tr.status,
+    phase: tr.phase,
+    leadSponsor: tr.leadSponsor,
+    countryCodes: [
+      ...new Set(tr.countries.map((c) => areaToAlpha2(c)).filter((c): c is string => c !== null)),
+    ],
+    countryLabels: [...new Set(tr.countries.map((c) => localizeArea(c, locale)))],
+    locations: tr.locations.map((l) => ({
+      facility: l.facility,
+      city: l.city,
+      countryLabel: l.country ? localizeArea(l.country, locale) : null,
+      countryCode: l.country ? areaToAlpha2(l.country) : null,
+    })),
+  }));
+
+  // Opciones del filtro, agrupadas por continente y solo con los países presentes en los
+  // centros de esta enfermedad.
+  const presentCodes = new Set(trialVMs.flatMap((tr) => tr.countryCodes));
+  const trialFilterGroups: TrialFilterGroup[] = CONTINENTS.flatMap((continent) => {
+    const memberCodes = [...presentCodes].filter((c) => ISO2_TO_CONTINENT[c] === continent);
+    if (memberCodes.length === 0) return [];
+    return [
+      {
+        continent,
+        label: tSearch(`continent.${continent}`),
+        allLabel: tSearch("geoContinentAll", { name: tSearch(`continent.${continent}`) }),
+        codes: memberCodes,
+        countries: memberCodes
+          .map((code) => ({ code, label: countryName(code, locale) }))
+          .sort((a, b) => a.label.localeCompare(b.label, locale)),
+      },
+    ];
+  });
 
   // Prevalencia en lenguaje llano («≈ 1 de cada N personas»); la cifra exacta de la
   // fuente se sigue enseñando aparte.
@@ -585,65 +628,11 @@ export default async function DiseasePage({ params }: Props) {
           <p className="section-intro">{td("whereToGoIntro")}</p>
           <div className="notice inline">{td("trialsWarning")}</div>
 
-          <ul className="trial-list">
-            {trials.map((t) => (
-              <li key={t.nctId} className="trial">
-                <div className="trial-head">
-                  <span className={`badge ${t.status === "RECRUITING" ? "" : "neutral"}`}>
-                    {t.status === "RECRUITING"
-                      ? td("statusRecruiting")
-                      : t.status === "NOT_YET_RECRUITING"
-                        ? td("statusNotYet")
-                        : td("statusOther")}
-                  </span>
-                  {t.phase && <span className="badge neutral">{t.phase}</span>}
-                </div>
-                <a
-                  className="trial-title"
-                  href={`https://clinicaltrials.gov/study/${t.nctId}`}
-                  rel="noreferrer"
-                  target="_blank"
-                  lang="en"
-                >
-                  {t.title}
-                </a>
-                {t.leadSponsor && (
-                  <div className="trial-sponsor">
-                    {td("sponsor")}: <strong>{t.leadSponsor}</strong>
-                  </div>
-                )}
-                {t.locations.length > 0 && (
-                  <details className="trial-locations">
-                    <summary>
-                      {td("centres", { count: t.locations.length })}
-                      {t.countries.length > 0 && (
-                        <span className="dim">
-                          {" · "}
-                          {t.countries
-                            .slice(0, 4)
-                            .map((c) => localizeArea(c, locale))
-                            .join(", ")}
-                          {t.countries.length > 4 && ` +${t.countries.length - 4}`}
-                        </span>
-                      )}
-                    </summary>
-                    <ul className="location-list">
-                      {t.locations.map((l, i) => (
-                        <li key={`${t.nctId}-${i}`}>
-                          {l.facility && <span className="facility">{l.facility}</span>}
-                          <span className="dim">
-                            {[l.city, l.country ? localizeArea(l.country, locale) : null]
-                              .filter(Boolean)
-                              .join(", ")}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </details>
-                )}
-              </li>
-            ))}
-          </ul>
+          <TrialList
+            trials={trialVMs}
+            filterGroups={trialFilterGroups}
+            labels={{ geoLabel: tSearch("geoLabel"), geoAll: tSearch("geoAll") }}
+          />
           <p className="hint">{td("trialsAttribution")}</p>
         </section>
       )}

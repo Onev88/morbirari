@@ -11,7 +11,17 @@
     "count": "{count, plural, =0 {No results} one {1 result} other {# results}}",
     "noResults": "Nothing found. Check the spelling, or try another name for it.",
     "degraded": "Search is running in degraded mode: results may be less precise.",
-    "empty": "Type something to start searching."
+    "empty": "Type something to start searching.",
+    "geoLabel": "Filter by place",
+    "geoAll": "Anywhere",
+    "geoContinentAll": "All of {name}",
+    "continent": {
+      "africa": "Africa",
+      "americas": "Americas",
+      "asia": "Asia",
+      "europe": "Europe",
+      "oceania": "Oceania"
+    }
   },
   "disease": {
     "orphaCode": "ORPHA code",
@@ -91,6 +101,9 @@
     "statusOther": "Open",
     "sponsor": "Sponsor",
     "centres": "{count, plural, one {1 centre} other {# centres}}",
+    "trialsFilterEmpty": "No trial has a centre in the selected place.",
+    "trialsShowing": "Showing {shown} of {total}",
+    "otherCentres": "Show {count, plural, one {1 other centre} other {# other centres}}",
     "drugs": "Drugs",
     "drugsIntro": "Medicines holding an orphan designation for this disease at regulatory agencies.",
     "drugsWarning": "An orphan designation does NOT mean the drug is approved, available, or effective. It means an agency has recognised that it is being developed for a rare disease. Many designations never become a medicine.",
