@@ -67,53 +67,79 @@ export function LeafletMap({
     if (!el) return;
 
     let cancelled = false;
+    let loading = false;
     let map: import("leaflet").Map | null = null;
     let bounds: import("leaflet").LatLngBounds | null = null;
     let libs: {
       L: typeof import("leaflet");
       feature: typeof import("topojson-client").feature;
       world: unknown;
+      geoNaturalEarth1: typeof import("d3-geo").geoNaturalEarth1;
     } | null = null;
+
+    // Lienzo de proyección (mismas dimensiones que el SVG servido: así el encuadre y la
+    // forma coinciden exactamente).
+    const PW = 1600;
+    const PH = 660;
 
     const visible = () => el.clientWidth > 0 && el.clientHeight > 0;
 
-    /** Reajusta el lienzo y reencuadra. Necesario porque un mapa creado (o dejado)
-     *  con tamaño 0 conserva un zoom/centro inservibles: no basta invalidateSize. */
+    // La sección del mapa (#geografia) vive en una pestaña. Solo se inicializa cuando ESA
+    // pestaña está seleccionada, no en el parpadeo inicial en que todas están visibles.
+    const sectionId = el.closest("section")?.id ?? null;
+    const isSectionActive = () => document.body.dataset.activeSection === sectionId;
+
+    /** Reajusta el lienzo y reencuadra. Necesario porque un mapa dejado con tamaño 0
+     *  conserva un zoom/centro inservibles: no basta invalidateSize. */
     function fit() {
       if (!map || !bounds) return;
       map.invalidateSize();
-      map.fitBounds(bounds, { padding: [8, 8] });
+      map.fitBounds(bounds, { padding: [4, 4] });
       map.setMinZoom(map.getZoom());
     }
     fitRef.current = fit;
 
-    /** Construcción SÍNCRONA del mapa (sin await): si se llama con el contenedor
-     *  visible, no hay ventana para que la pestaña se oculte a mitad y arranque a 0×0. */
+    /**
+     * Construcción SÍNCRONA del mapa (sin await). El truco de proyección: en vez de
+     * dejar que Leaflet proyecte lat/lng (equirrectangular o Mercator, que estiran el
+     * mundo), se usa la MISMA proyección Natural Earth que el SVG del servidor —vía d3—
+     * y se monta sobre un CRS.Simple (plano de píxeles ya proyectados). Así el mapa se ve
+     * idéntico al SVG bonito de antes, pero con zoom, desplazamiento y tooltips.
+     */
     function build() {
       if (!libs || map || !el) return;
-      const { L, feature, world } = libs;
+      const { L, feature, world, geoNaturalEarth1 } = libs;
       const w = world as { objects: { countries: unknown } } & Parameters<typeof feature>[0];
-      const fc = feature(w, w.objects.countries as never) as unknown as {
+      const raw = feature(w, w.objects.countries as never) as unknown as {
         type: "FeatureCollection";
         features: { id?: string | number; properties: { name: string } }[];
       };
       // Fuera la Antártida, igual que en el SVG servido: ni hay datos ni aporta nada.
-      fc.features = fc.features.filter((f) => f.properties.name !== "Antarctica");
+      const fc = {
+        type: "FeatureCollection" as const,
+        features: raw.features.filter((f) => f.properties.name !== "Antarctica"),
+      };
 
+      const projection = geoNaturalEarth1().fitSize([PW, PH], fc as never);
       const byId = new Map(data.map((d) => [d.numericId, d]));
 
       map = L.map(el, {
-        crs: L.CRS.EPSG4326,
+        crs: L.CRS.Simple, // plano: las coordenadas ya vienen proyectadas por d3
         zoomControl: false, // usamos nuestros propios botones, coherentes con el resto
         attributionControl: false, // sin tiles no hay atribución de mapa que mostrar
         zoomSnap: 0.25,
-        minZoom: 0,
+        minZoom: -10,
         maxZoom: 6,
-        worldCopyJump: false,
         inertia: true,
       });
 
       const layer = L.geoJSON(fc as unknown as GeoJsonObject, {
+        // Cada [lng,lat] se proyecta con Natural Earth a píxeles [x,y] (y hacia abajo) y
+        // se entrega a Leaflet como punto del plano (lat=-y para que el norte quede arriba).
+        coordsToLatLng: (coords) => {
+          const p = projection([coords[0], coords[1]]) ?? [0, 0];
+          return L.latLng(-p[1], p[0]);
+        },
         style: (featObj) => {
           const datum = featObj ? byId.get(String((featObj as { id?: unknown }).id)) : undefined;
           return {
@@ -138,46 +164,59 @@ export function LeafletMap({
       }).addTo(map);
 
       bounds = layer.getBounds();
-      map.setMaxBounds(bounds.pad(0.15)); // no dejar arrastrar el mundo fuera de cuadro
+      map.setMaxBounds(bounds.pad(0.1)); // no dejar arrastrar el mundo fuera de cuadro
       mapRef.current = map;
       setReady(true);
     }
 
-    /** Construye (si hace falta) y reencuadra, solo cuando el contenedor es visible.
-     *  Síncrono: seguro llamarlo desde cualquier disparador. */
-    function tryRender() {
-      if (cancelled || !libs || !visible()) return;
-      build();
+    async function loadLibs() {
+      if (libs || loading) return;
+      loading = true;
+      try {
+        const L = await import("leaflet");
+        const topo = await import("topojson-client");
+        const worldMod = await import("world-atlas/countries-110m.json");
+        const d3 = await import("d3-geo");
+        if (cancelled) return;
+        libs = {
+          L,
+          feature: topo.feature,
+          world: worldMod.default ?? worldMod,
+          geoNaturalEarth1: d3.geoNaturalEarth1,
+        };
+      } finally {
+        loading = false;
+      }
+    }
+
+    /**
+     * Punto de entrada: construir/reencuadrar SOLO si la pestaña del mapa está
+     * seleccionada y visible. Se carga la librería aquí (perezosa): nada de mapa hasta
+     * que el usuario abre «Dónde se documenta». Tras el `await` se vuelve a comprobar la
+     * visibilidad, por si se cambió de pestaña mientras cargaba.
+     */
+    async function activate() {
+      if (cancelled || !isSectionActive() || !visible()) return;
+      if (!libs) {
+        await loadLibs();
+        if (cancelled || !isSectionActive() || !visible()) return;
+      }
+      if (!map) build();
       fit();
     }
 
-    // Se precargan las librerías al montar, SIN esperar a que el mapa sea visible. Así,
-    // cuando el usuario abre la pestaña, `build()` ya puede correr de forma síncrona.
-    (async () => {
-      const L = await import("leaflet");
-      const { feature } = await import("topojson-client");
-      const worldMod = await import("world-atlas/countries-110m.json");
-      if (cancelled) return;
-      libs = { L, feature, world: worldMod.default ?? worldMod };
-      tryRender(); // por si la sección ya está visible cuando terminan de cargar
-    })().catch(() => {
-      // Silencio deliberado: el SVG servido sigue visible como fallback.
-    });
-
-    // Disparador PRINCIPAL: la sección se muestra/oculta cambiando `data-active-section`
-    // en el <body> (ver section-nav). Observar ese atributo es más fiable que observar
-    // la visibilidad del elemento: un ResizeObserver/IntersectionObserver no dispara de
-    // forma fiable al pasar de `display:none` a visible cuando quien se oculta es un
-    // ancestro. Al cambiar de pestaña, se intenta construir/reencuadrar.
-    const mo = new MutationObserver(() => tryRender());
+    // Disparador principal: el cambio de pestaña se refleja en `data-active-section` del
+    // <body> (ver section-nav). Es más fiable que observar la visibilidad del elemento:
+    // un ResizeObserver/IntersectionObserver no dispara al pasar de display:none a
+    // visible cuando quien se oculta es un ancestro.
+    const mo = new MutationObserver(() => activate());
     mo.observe(document.body, { attributes: true, attributeFilter: ["data-active-section"] });
 
-    // Complemento: reencuadrar cuando cambia el tamaño con el mapa ya visible
-    // (redimensionar la ventana, girar el móvil).
-    const ro = new ResizeObserver(() => tryRender());
+    // Complemento: reencuadrar al cambiar el tamaño con el mapa ya visible.
+    const ro = new ResizeObserver(() => activate());
     ro.observe(el);
 
-    tryRender();
+    activate(); // por si ya está seleccionada al montar (carga directa a #geografia)
 
     return () => {
       cancelled = true;
