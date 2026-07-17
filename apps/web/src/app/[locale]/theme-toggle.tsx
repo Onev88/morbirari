@@ -12,20 +12,21 @@ type Labels = {
 };
 
 /**
- * Conmutador de tema de tres estados: Automático → Claro → Oscuro → Automático.
+ * Interruptor de tema de dos estados: Claro ↔ Oscuro.
  *
  * Diseño:
- *  - «Automático» no fija atributo y deja mandar a `prefers-color-scheme`; es el
- *    estado por defecto y el que ve quien no ha tocado nada.
- *  - Claro/Oscuro fijan `data-theme` en <html> y se recuerdan en localStorage, así
- *    que la elección sobrevive a la recarga y a la navegación.
+ *  - Cada clic fija `data-theme` en <html> (claro u oscuro) y lo recuerda en
+ *    localStorage, así que la elección sobrevive a la recarga y a la navegación.
+ *  - En la PRIMERA visita, sin elección guardada, no se fija atributo y manda
+ *    `prefers-color-scheme` (el sistema). No es un estado «Automático» seleccionable:
+ *    es solo el punto de partida hasta el primer clic, que ya deja un tema explícito.
  *  - El primer pintado ya trae el tema correcto gracias al script en línea del
  *    layout; este componente solo sincroniza el icono y gestiona el clic. Por eso no
- *    renderiza nada hasta montarse (`mounted`): evita un desajuste de hidratación
+ *    decide el icono hasta montarse (`mounted`): evita un desajuste de hidratación
  *    entre el HTML del servidor (que no conoce localStorage) y el cliente.
- *  - El botón es solo icono (sol/luna), sin texto. En «Automático» muestra el icono
- *    del tema EFECTIVO del sistema, de modo que solo aparecen sol o luna; el nombre
- *    del modo se conserva en `aria-label`/`title` para accesibilidad.
+ *  - El botón es solo icono, sin texto: sol (claro) o luna (oscuro). Mientras no haya
+ *    elección, muestra el icono del tema EFECTIVO del sistema. El nombre del tema se
+ *    conserva en `aria-label`/`title` para accesibilidad.
  */
 export function ThemeToggle({ labels }: { labels: Labels }) {
   const [mode, setMode] = useState<Mode>("auto");
@@ -81,26 +82,26 @@ export function ThemeToggle({ labels }: { labels: Labels }) {
   }
 
   function cycle() {
-    // Se calcula el siguiente estado desde el tema APLICADO (DOM), no desde `mode`.
-    // `mode` puede ir un render por detrás: al pulsar rápido (o el doble clic de «no
-    // cambió, vuelvo a pulsar») `apply` ya movió el DOM pero React aún no re-renderizó,
-    // y derivar de `mode` repetía el valor anterior y dejaba el ciclo atascado.
-    const cur = appliedTheme();
-    apply(cur === "auto" ? "light" : cur === "light" ? "dark" : "auto");
+    // Interruptor de dos estados: se fija SIEMPRE el tema contrario al efectivo actual.
+    // El «efectivo» se lee del DOM (o del sistema si aún no hay elección), no de `mode`,
+    // que puede ir un render por detrás: así al pulsar rápido no se atasca ni se salta.
+    const applied = appliedTheme();
+    const effDark = applied === "dark" || (applied === "auto" && systemDark);
+    apply(effDark ? "light" : "dark");
   }
 
-  const current = mode === "auto" ? labels.auto : mode === "light" ? labels.light : labels.dark;
-  // El tema efectivo: en «Automático» lo decide el sistema. Solo sol o luna, nunca un
-  // tercer icono. Antes de montar se asume claro (sol), lo que casa con el HTML servido.
+  // Tema efectivo mostrado: el elegido, o el del sistema mientras no haya elección. Solo
+  // sol o luna. Antes de montar se asume claro (sol), lo que casa con el HTML servido.
   const effectiveDark = mounted && (mode === "dark" || (mode === "auto" && systemDark));
+  const currentLabel = effectiveDark ? labels.dark : labels.light;
 
   return (
     <button
       type="button"
       className="theme-toggle"
       onClick={cycle}
-      aria-label={`${labels.toggle} · ${current}`}
-      title={`${labels.toggle} · ${current}`}
+      aria-label={`${labels.toggle} · ${currentLabel}`}
+      title={`${labels.toggle} · ${currentLabel}`}
     >
       <span className="theme-icon" aria-hidden="true">
         {effectiveDark ? <MoonIcon /> : <SunIcon />}
