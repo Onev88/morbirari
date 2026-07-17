@@ -1235,13 +1235,14 @@ main:focus {
   gap: 12px;
 }
 
+/* Botón de tema solo icono (sol/luna): cuadrado, del mismo alto que el resto de la
+   cabecera. Sin texto. */
 .theme-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  font-size: 0.8rem;
-  line-height: 1;
+  justify-content: center;
+  padding: 6px;
+  line-height: 0;
   border: 1px solid var(--border);
   border-radius: 99px;
   background: var(--surface);
@@ -1257,16 +1258,6 @@ main:focus {
 
 .theme-icon {
   display: inline-flex;
-}
-
-.theme-label {
-  font-weight: 550;
-}
-
-@media (max-width: 560px) {
-  .theme-label {
-    display: none;
-  }
 }
 
 /* ------------------------------------------------- aviso legal (banner + pie) */

@@ -23,10 +23,14 @@ type Labels = {
  *    layout; este componente solo sincroniza el icono y gestiona el clic. Por eso no
  *    renderiza nada hasta montarse (`mounted`): evita un desajuste de hidratación
  *    entre el HTML del servidor (que no conoce localStorage) y el cliente.
+ *  - El botón es solo icono (sol/luna), sin texto. En «Automático» muestra el icono
+ *    del tema EFECTIVO del sistema, de modo que solo aparecen sol o luna; el nombre
+ *    del modo se conserva en `aria-label`/`title` para accesibilidad.
  */
 export function ThemeToggle({ labels }: { labels: Labels }) {
   const [mode, setMode] = useState<Mode>("auto");
   const [mounted, setMounted] = useState(false);
+  const [systemDark, setSystemDark] = useState(false);
 
   useEffect(() => {
     let stored: string | null = null;
@@ -37,6 +41,14 @@ export function ThemeToggle({ labels }: { labels: Labels }) {
     }
     setMode(stored === "light" || stored === "dark" ? stored : "auto");
     setMounted(true);
+
+    // En modo «Automático» el icono debe reflejar lo que decide el sistema, y seguir
+    // reflejándolo si el usuario cambia el tema del SO con la página abierta.
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    setSystemDark(mq.matches);
+    const onChange = (e: MediaQueryListEvent) => setSystemDark(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
   }, []);
 
   /**
@@ -78,6 +90,9 @@ export function ThemeToggle({ labels }: { labels: Labels }) {
   }
 
   const current = mode === "auto" ? labels.auto : mode === "light" ? labels.light : labels.dark;
+  // El tema efectivo: en «Automático» lo decide el sistema. Solo sol o luna, nunca un
+  // tercer icono. Antes de montar se asume claro (sol), lo que casa con el HTML servido.
+  const effectiveDark = mounted && (mode === "dark" || (mode === "auto" && systemDark));
 
   return (
     <button
@@ -88,11 +103,8 @@ export function ThemeToggle({ labels }: { labels: Labels }) {
       title={`${labels.toggle} · ${current}`}
     >
       <span className="theme-icon" aria-hidden="true">
-        {mounted && mode === "light" && <SunIcon />}
-        {mounted && mode === "dark" && <MoonIcon />}
-        {(!mounted || mode === "auto") && <AutoIcon />}
+        {effectiveDark ? <MoonIcon /> : <SunIcon />}
       </span>
-      <span className="theme-label">{mounted ? current : labels.auto}</span>
     </button>
   );
 }
@@ -114,11 +126,3 @@ function MoonIcon() {
   );
 }
 
-function AutoIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
