@@ -329,6 +329,8 @@ export type TrialRow = {
   phase: string | null;
   leadSponsor: string | null;
   sponsorClass: string | null;
+  startDate: string | null;
+  lastUpdate: string | null;
   locations: TrialLocation[];
   countries: string[];
 };
@@ -349,9 +351,12 @@ export async function getTrials(diseaseId: string, limit = 25): Promise<TrialRow
       phase: string | null;
       lead_sponsor: string | null;
       sponsor_class: string | null;
+      start_date: string | null;
+      last_update: string | null;
     }[]
   >`
-    SELECT t.nct_id, t.title, t.status, t.phase, t.lead_sponsor, t.sponsor_class
+    SELECT t.nct_id, t.title, t.status, t.phase, t.lead_sponsor, t.sponsor_class,
+           t.start_date, t.last_update
     FROM disease_trial dt
     JOIN trial t ON t.nct_id = dt.nct_id
     WHERE dt.disease_id = ${diseaseId}
@@ -388,6 +393,8 @@ export async function getTrials(diseaseId: string, limit = 25): Promise<TrialRow
       phase: r.phase,
       leadSponsor: r.lead_sponsor,
       sponsorClass: r.sponsor_class,
+      startDate: r.start_date,
+      lastUpdate: r.last_update,
       locations,
       countries: [...new Set(locations.map((l) => l.country).filter((c): c is string => !!c))],
     };
@@ -441,6 +448,103 @@ export async function getDrugs(diseaseId: string, limit = 30): Promise<DrugRow[]
     url: r.url,
     matchedOn: r.matched_on,
   }));
+}
+
+/**
+ * Un hecho fechado de la actividad investigadora de la enfermedad, para el feed
+ * «actividad reciente».
+ *
+ * No es una fuente nueva: se compone en memoria a partir de los ensayos y las
+ * designaciones que la ficha ya carga. Por eso no hay consulta propia.
+ *
+ * Ámbito (ADR 0005): esto es *actividad de investigación*, no noticias de prensa. La
+ * literatura (Europe PMC) entra en la Fase B como fuente propia; aquí, de momento, solo
+ * ensayos y designaciones.
+ */
+export type ActivityItem =
+  | {
+      kind: "trial";
+      date: string;
+      nctId: string;
+      title: string;
+      status: string;
+      phase: string | null;
+    }
+  | {
+      kind: "designation";
+      date: string;
+      agency: string;
+      name: string;
+      url: string | null;
+    };
+
+/**
+ * Normaliza una fecha de fuente a ISO ordenable ('AAAA-MM-DD', o su prefijo).
+ *
+ * Las fuentes no coinciden en formato: ClinicalTrials.gov la entrega en ISO
+ * ('2026-07-15', a veces solo 'AAAA-MM'), mientras que la EMA la da como 'DD/MM/AAAA'.
+ * Mezclarlas sin normalizar rompe a la vez el orden cronológico (comparar texto entre
+ * formatos distintos no significa nada) y el formateo en pantalla. Se devuelve null si no
+ * se reconoce: un hecho sin fecha fiable no entra en una línea temporal.
+ */
+function normalizeSourceDate(raw: string | null): string | null {
+  if (!raw) return null;
+  if (/^\d{4}(-\d{2}){0,2}$/.test(raw)) return raw;
+  const dmy = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (dmy) return `${dmy[3]}-${dmy[2]}-${dmy[1]}`;
+  return null;
+}
+
+/**
+ * Compone el feed de actividad reciente uniendo ensayos y designaciones por fecha.
+ *
+ * Orden **cronológico descendente y determinista, sin ranking de relevancia** (ADR 0005,
+ * mismo principio que el ADR 0002 con el fenotipo): ordenar por «importancia» sería emitir
+ * un juicio médico. El desempate por identificador mantiene el orden estable cuando dos
+ * hechos comparten fecha.
+ *
+ * La fecha del ensayo es su última actualización (o el inicio, si falta): es la señal de
+ * que algo se ha movido. Un hecho sin fecha no cabe en una línea temporal y se descarta.
+ */
+export function buildRecentActivity(
+  trials: TrialRow[],
+  drugs: DrugRow[],
+  limit = 8
+): ActivityItem[] {
+  const items: ActivityItem[] = [];
+
+  for (const t of trials) {
+    const date = normalizeSourceDate(t.lastUpdate ?? t.startDate);
+    if (!date) continue;
+    items.push({
+      kind: "trial",
+      date,
+      nctId: t.nctId,
+      title: t.title,
+      status: t.status,
+      phase: t.phase,
+    });
+  }
+
+  for (const d of drugs) {
+    const date = normalizeSourceDate(d.designationDate);
+    if (!date) continue;
+    items.push({
+      kind: "designation",
+      date,
+      agency: d.agency,
+      name: d.medicineName ?? d.activeSubstance ?? "—",
+      url: d.url,
+    });
+  }
+
+  const idOf = (i: ActivityItem) => (i.kind === "trial" ? i.nctId : `${i.agency}:${i.name}`);
+  items.sort((a, b) => {
+    if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+    return idOf(a) < idOf(b) ? -1 : idOf(a) > idOf(b) ? 1 : 0;
+  });
+
+  return items.slice(0, limit);
 }
 
 /** Nombres en otros idiomas fuera de los que sirve la interfaz (hoy, japonés). */

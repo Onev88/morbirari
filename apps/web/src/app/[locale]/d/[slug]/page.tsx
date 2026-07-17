@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getDiseaseBySlug } from "@/lib/db";
 import {
+  buildRecentActivity,
   getClassificationContext,
   getDrugs,
   getGenes,
@@ -52,6 +53,22 @@ const HGNC_URL = (id: string) => `https://www.genenames.org/data/gene-symbol-rep
 const ENSEMBL_URL = (id: string) => `https://www.ensembl.org/Homo_sapiens/Gene/Summary?g=${id}`;
 const UNIPROT_URL = (id: string) => `https://www.uniprot.org/uniprotkb/${id}`;
 const PUBMED_URL = (id: string) => `https://pubmed.ncbi.nlm.nih.gov/${id}/`;
+
+// Las fechas de las fuentes llegan como texto ISO parcial ('AAAA', 'AAAA-MM' o
+// 'AAAA-MM-DD'). Para el feed basta mes y año, y se parsean los enteros a mano para no
+// depender de husos: `new Date('2026-06')` interpretaría UTC y podría cambiar de mes.
+function formatActivityDate(iso: string, locale: string): string {
+  const [y, m] = iso.split("-");
+  const year = Number(y);
+  if (!year) return iso;
+  const month = m ? Number(m) : null;
+  const date = new Date(Date.UTC(year, month ? month - 1 : 0, 1));
+  return new Intl.DateTimeFormat(locale, {
+    year: "numeric",
+    month: month ? "short" : undefined,
+    timeZone: "UTC",
+  }).format(date);
+}
 
 export default async function DiseasePage({ params }: Props) {
   const { locale, slug } = await params;
@@ -104,6 +121,10 @@ export default async function DiseasePage({ params }: Props) {
   // prometer nada.
   const recruiting = trials.filter((t) => t.status === "RECRUITING");
 
+  // Feed de actividad reciente: se compone de los ensayos y designaciones ya cargados,
+  // ordenados por fecha. No es una fuente nueva ni una consulta extra (ADR 0005).
+  const activity = buildRecentActivity(trials, drugs);
+
   // Prevalencia en lenguaje llano («≈ 1 de cada N personas»); la cifra exacta de la
   // fuente se sigue enseñando aparte.
   const prevalencePlain = parsePrevalenceClass(keyFacts.prevalenceClass);
@@ -118,6 +139,9 @@ export default async function DiseasePage({ params }: Props) {
     // (herencia, edad de inicio, prevalencia) van justo debajo, en la misma pestaña.
     // Se renderiza siempre, aunque no haya texto de definición.
     { id: "definicion", label: t("definition") },
+    ...(activity.length > 0
+      ? [{ id: "actividad", label: td("recentActivity"), count: activity.length }]
+      : []),
     ...(geography.length > 0
       ? [{ id: "geografia", label: td("geography"), count: countryCount }]
       : []),
@@ -271,6 +295,82 @@ export default async function DiseasePage({ params }: Props) {
           </div>
         )}
       </section>
+
+      {activity.length > 0 && (
+        <section className="block" id="actividad">
+          <h2>{td("recentActivity")}</h2>
+          {/*
+            Encuadre neutral (ADR 0005): «actividad investigadora», no «avances hacia la
+            cura». Es lo que se mueve alrededor de la enfermedad —ensayos y designaciones—,
+            en orden cronológico y sin ranking de relevancia: ordenar por «importancia»
+            sería un juicio médico.
+          */}
+          <p className="section-intro">{td("recentActivityIntro")}</p>
+
+          <ul className="activity-list">
+            {activity.map((a) => {
+              const date = formatActivityDate(a.date, locale);
+              if (a.kind === "trial") {
+                return (
+                  <li key={`t-${a.nctId}`} className="activity activity--trial">
+                    <div className="activity-head">
+                      <span className="activity-type">{td("activityTrial")}</span>
+                      {a.phase && <span className="badge neutral">{a.phase}</span>}
+                      <span className="badge neutral">
+                        {a.status === "RECRUITING"
+                          ? td("statusRecruiting")
+                          : a.status === "NOT_YET_RECRUITING"
+                            ? td("statusNotYet")
+                            : td("statusOther")}
+                      </span>
+                      <time className="activity-date" dateTime={a.date}>
+                        {date}
+                      </time>
+                    </div>
+                    <a
+                      className="activity-title"
+                      href={`https://clinicaltrials.gov/study/${a.nctId}`}
+                      rel="noreferrer"
+                      target="_blank"
+                      lang="en"
+                    >
+                      {a.title}
+                    </a>
+                  </li>
+                );
+              }
+              return (
+                <li key={`d-${a.agency}-${a.name}-${a.date}`} className="activity activity--designation">
+                  <div className="activity-head">
+                    <span className="activity-type">{td("activityDesignation")}</span>
+                    <span className="badge neutral">{a.agency}</span>
+                    <time className="activity-date" dateTime={a.date}>
+                      {date}
+                    </time>
+                  </div>
+                  <div className="activity-title">
+                    {td("activityDesignationLine")}
+                    {a.name !== "—" && (
+                      <>
+                        {" · "}
+                        {a.url ? (
+                          <a href={a.url} rel="noreferrer" target="_blank" lang="en">
+                            {a.name}
+                          </a>
+                        ) : (
+                          <span lang="en">{a.name}</span>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  {/* La salvedad que no se aplana: designación ≠ aprobación (regla 17). */}
+                  <div className="activity-meta">{td("activityDesignationNote")}</div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       {geography.length > 0 && (
         <section className="block" id="geografia">

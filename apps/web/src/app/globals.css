@@ -281,6 +281,7 @@ body[data-tabs-ready="true"] section.block[id] {
 }
 
 body[data-tabs-ready="true"][data-active-section="definicion"] section.block#definicion,
+body[data-tabs-ready="true"][data-active-section="actividad"] section.block#actividad,
 body[data-tabs-ready="true"][data-active-section="geografia"] section.block#geografia,
 body[data-tabs-ready="true"][data-active-section="signos"] section.block#signos,
 body[data-tabs-ready="true"][data-active-section="genes"] section.block#genes,
@@ -999,6 +1000,82 @@ section.block h2 {
 
 .location-list .facility {
   margin-right: 6px;
+}
+
+/* ---------------------------------------------------------- actividad reciente */
+
+/*
+ * Feed cronológico de lo que se mueve alrededor de la enfermedad (ensayos,
+ * designaciones). El filo izquierdo va por box-shadow inset, igual que la fila del gen
+ * causante: así no pelea con el radio de la esquina. El color distingue el tipo, pero
+ * nunca es la única señal — cada tarjeta lleva su etiqueta de texto.
+ */
+.activity-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.activity {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+
+.activity--trial {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.activity--designation {
+  box-shadow: inset 3px 0 0 var(--warn-border);
+}
+
+.activity-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.activity-type {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.activity--trial .activity-type {
+  color: var(--accent);
+}
+
+.activity-date {
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.activity-title {
+  display: block;
+  font-weight: 550;
+  font-size: 0.92rem;
+  text-decoration: none;
+}
+
+a.activity-title:hover {
+  text-decoration: underline;
+}
+
+.activity-meta {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-top: 4px;
 }
 
 .drug-table {
