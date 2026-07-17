@@ -94,25 +94,32 @@ se contradicen, es un bug: páralo y avisa, no lo repliques.
 18. **Sanitización siempre.** El HTML de las fuentes se sanea con lista blanca aunque la
     fuente sea de confianza ([`sanitize.ts`](apps/web/src/lib/sanitize.ts)). Que el origen
     sea fiable no es razón para no escapar.
+19. **Avances = actividad, no noticias; imágenes esquemáticas, no clínicas** (ADR 0005). Lo
+    «reciente» de una ficha es *actividad investigadora* —publicaciones (solo metadatos,
+    nunca el texto), ensayos, designaciones—, en orden **cronológico y sin ranking de
+    relevancia** (mismo principio que la regla 16). Nada de prensa scrapeada. **Prohibida la
+    fotografía clínica de pacientes**: solo imagen esquemática o derivada de datos (herencia,
+    mapas, prevalencia). El porqué, en
+    [ADR 0005](docs/adr/0005-actividad-reciente-avances-sin-fotografia-clinica.md).
 
 ## Web
 
-19. **Indexable y sin JavaScript.** El contenido va en el HTML (SSR); las pestañas cargan
+20. **Indexable y sin JavaScript.** El contenido va en el HTML (SSR); las pestañas cargan
     todo el contenido para que siga siendo indexable y funcione sin JS.
-20. **Bilingüe de serie** (ES/EN) y con **tema claro/oscuro**. Todo texto de interfaz vive
+21. **Bilingüe de serie** (ES/EN) y con **tema claro/oscuro**. Todo texto de interfaz vive
     en `messages/{lang}.json`, nunca incrustado.
 
 ## Idioma, estilo y flujo
 
-21. **Todo en español**: código-prosa (comentarios, docstrings), mensajes de commit, ADRs y
+22. **Todo en español**: código-prosa (comentarios, docstrings), mensajes de commit, ADRs y
     documentación. Los identificadores de esquema pueden ser términos técnicos en inglés,
     pero la prosa que los rodea es española.
-22. **Git**: `main` es la principal. El trabajo nuevo va en `develop` y luego se lleva a
+23. **Git**: `main` es la principal. El trabajo nuevo va en `develop` y luego se lleva a
     `main` por *fast-forward*. Commits en español, descriptivos. No commitear a `main`
     directo. No commitear ni hacer push salvo que se pida.
-23. **Las decisiones de fondo se registran como ADR** en `docs/adr/`, numerados y en el
+24. **Las decisiones de fondo se registran como ADR** en `docs/adr/`, numerados y en el
     estilo de la casa (skill `escribir-adr`). Un TODO puntual va en [TODO.md](TODO.md).
-24. **Verificar antes de dar por hecho.** Tests: `cd etl && pytest`; `cd apps/web && npm run
+25. **Verificar antes de dar por hecho.** Tests: `cd etl && pytest`; `cd apps/web && npm run
     typecheck && npm run build`. Si algo falla, se dice con la salida; no se maquilla.
 
 ## Comandos
