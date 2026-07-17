@@ -75,6 +75,7 @@ export function LeafletMap({
       feature: typeof import("topojson-client").feature;
       world: unknown;
       geoNaturalEarth1: typeof import("d3-geo").geoNaturalEarth1;
+      geoProject: typeof import("d3-geo-projection").geoProject;
     } | null = null;
 
     // Lienzo de proyección (mismas dimensiones que el SVG servido: así el encuadre y la
@@ -108,19 +109,36 @@ export function LeafletMap({
      */
     function build() {
       if (!libs || map || !el) return;
-      const { L, feature, world, geoNaturalEarth1 } = libs;
+      const { L, feature, world, geoNaturalEarth1, geoProject } = libs;
       const w = world as { objects: { countries: unknown } } & Parameters<typeof feature>[0];
       const raw = feature(w, w.objects.countries as never) as unknown as {
         type: "FeatureCollection";
-        features: { id?: string | number; properties: { name: string } }[];
+        features: { id?: string | number; properties: { name: string }; geometry: unknown }[];
       };
       // Fuera la Antártida, igual que en el SVG servido: ni hay datos ni aporta nada.
-      const fc = {
+      const kept = raw.features.filter((f) => f.properties.name !== "Antarctica");
+
+      const projection = geoNaturalEarth1().fitSize([PW, PH], {
+        type: "FeatureCollection",
+        features: kept,
+      } as never);
+
+      // Se proyecta con geoProject (que CORTA en el antimeridiano y recorta a la esfera,
+      // igual que geoPath al dibujar), no punto por punto: así países que cruzan ±180°
+      // —Fiji, sobre todo— no dibujan una raya horizontal de lado a lado del mapa. Se
+      // conservan `id` (para casar con los datos) y `properties` (el nombre del tooltip).
+      const projFc = {
         type: "FeatureCollection" as const,
-        features: raw.features.filter((f) => f.properties.name !== "Antarctica"),
+        features: kept
+          .map((f) => {
+            const geometry = geoProject(f.geometry as GeoJsonObject, projection);
+            return geometry
+              ? { type: "Feature" as const, id: f.id, properties: f.properties, geometry }
+              : null;
+          })
+          .filter((f): f is NonNullable<typeof f> => f !== null),
       };
 
-      const projection = geoNaturalEarth1().fitSize([PW, PH], fc as never);
       const byId = new Map(data.map((d) => [d.numericId, d]));
 
       map = L.map(el, {
@@ -133,13 +151,10 @@ export function LeafletMap({
         inertia: true,
       });
 
-      const layer = L.geoJSON(fc as unknown as GeoJsonObject, {
-        // Cada [lng,lat] se proyecta con Natural Earth a píxeles [x,y] (y hacia abajo) y
-        // se entrega a Leaflet como punto del plano (lat=-y para que el norte quede arriba).
-        coordsToLatLng: (coords) => {
-          const p = projection([coords[0], coords[1]]) ?? [0, 0];
-          return L.latLng(-p[1], p[0]);
-        },
+      const layer = L.geoJSON(projFc as unknown as GeoJsonObject, {
+        // Coordenadas ya proyectadas (píxeles, y hacia abajo). CRS.Simple: lat=-y para
+        // que el norte quede arriba.
+        coordsToLatLng: (coords) => L.latLng(-coords[1], coords[0]),
         style: (featObj) => {
           const datum = featObj ? byId.get(String((featObj as { id?: unknown }).id)) : undefined;
           return {
@@ -177,12 +192,14 @@ export function LeafletMap({
         const topo = await import("topojson-client");
         const worldMod = await import("world-atlas/countries-110m.json");
         const d3 = await import("d3-geo");
+        const d3proj = await import("d3-geo-projection");
         if (cancelled) return;
         libs = {
           L,
           feature: topo.feature,
           world: worldMod.default ?? worldMod,
           geoNaturalEarth1: d3.geoNaturalEarth1,
+          geoProject: d3proj.geoProject,
         };
       } finally {
         loading = false;
