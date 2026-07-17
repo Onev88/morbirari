@@ -57,6 +57,9 @@ export function LeafletMap({
   // Tipado laxo a propósito: Leaflet se carga en tiempo de ejecución y no queremos
   // arrastrar sus tipos al bundle del servidor. Los usos concretos van acotados.
   const mapRef = useRef<import("leaflet").Map | null>(null);
+  // Reencuadre al estado inicial (centrar + zoom de ajuste). Lo expone el efecto para
+  // que el botón de reinicio lo use; vive en un ref porque `bounds` está en el efecto.
+  const fitRef = useRef<(() => void) | null>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -64,99 +67,121 @@ export function LeafletMap({
     if (!el) return;
 
     let cancelled = false;
-    let built = false;
     let map: import("leaflet").Map | null = null;
+    let bounds: import("leaflet").LatLngBounds | null = null;
+    let libs: {
+      L: typeof import("leaflet");
+      feature: typeof import("topojson-client").feature;
+      world: unknown;
+    } | null = null;
 
-    async function build() {
-      if (built || cancelled || !el) return;
-      built = true;
-      try {
-        const L = await import("leaflet");
-        const { feature } = await import("topojson-client");
-        const worldMod = await import("world-atlas/countries-110m.json");
-        if (cancelled || !el) return;
+    const visible = () => el.clientWidth > 0 && el.clientHeight > 0;
 
-        const world = (worldMod.default ?? worldMod) as unknown as {
-          objects: { countries: unknown };
-        } & Parameters<typeof feature>[0];
+    /** Reajusta el lienzo y reencuadra. Necesario porque un mapa creado (o dejado)
+     *  con tamaño 0 conserva un zoom/centro inservibles: no basta invalidateSize. */
+    function fit() {
+      if (!map || !bounds) return;
+      map.invalidateSize();
+      map.fitBounds(bounds, { padding: [8, 8] });
+      map.setMinZoom(map.getZoom());
+    }
+    fitRef.current = fit;
 
-        const fc = feature(world, world.objects.countries as never) as unknown as {
-          type: "FeatureCollection";
-          features: {
-            id?: string | number;
-            properties: { name: string };
-          }[];
-        };
-        // Fuera la Antártida, igual que en el SVG servido: ni hay datos ni aporta nada.
-        fc.features = fc.features.filter((f) => f.properties.name !== "Antarctica");
+    /** Construcción SÍNCRONA del mapa (sin await): si se llama con el contenedor
+     *  visible, no hay ventana para que la pestaña se oculte a mitad y arranque a 0×0. */
+    function build() {
+      if (!libs || map || !el) return;
+      const { L, feature, world } = libs;
+      const w = world as { objects: { countries: unknown } } & Parameters<typeof feature>[0];
+      const fc = feature(w, w.objects.countries as never) as unknown as {
+        type: "FeatureCollection";
+        features: { id?: string | number; properties: { name: string } }[];
+      };
+      // Fuera la Antártida, igual que en el SVG servido: ni hay datos ni aporta nada.
+      fc.features = fc.features.filter((f) => f.properties.name !== "Antarctica");
 
-        const byId = new Map(data.map((d) => [d.numericId, d]));
+      const byId = new Map(data.map((d) => [d.numericId, d]));
 
-        map = L.map(el, {
-          crs: L.CRS.EPSG4326,
-          zoomControl: false, // usamos nuestros propios botones, coherentes con el resto
-          attributionControl: false, // sin tiles no hay atribución de mapa que mostrar
-          zoomSnap: 0.25,
-          minZoom: 0,
-          maxZoom: 6,
-          worldCopyJump: false,
-          // El coroplético es el contenido; sin inercia agresiva se lee mejor.
-          inertia: true,
-        });
+      map = L.map(el, {
+        crs: L.CRS.EPSG4326,
+        zoomControl: false, // usamos nuestros propios botones, coherentes con el resto
+        attributionControl: false, // sin tiles no hay atribución de mapa que mostrar
+        zoomSnap: 0.25,
+        minZoom: 0,
+        maxZoom: 6,
+        worldCopyJump: false,
+        inertia: true,
+      });
 
-        const layer = L.geoJSON(fc as unknown as GeoJsonObject, {
-          style: (featObj) => {
-            const datum = featObj ? byId.get(String((featObj as { id?: unknown }).id)) : undefined;
-            return {
-              className: datum ? `mr-country step-${datum.step}` : "mr-country no-data",
-              // El color de relleno y trazo lo pone el CSS (por className) para heredar el
-              // tema; Leaflet solo controla grosor y opacidad.
-              weight: 0.5,
-              fillOpacity: 1,
-            };
-          },
-          onEachFeature: (featObj, lyr) => {
-            const id = String((featObj as { id?: unknown }).id);
-            const datum = byId.get(id);
-            const name = datum ? datum.name : (featObj.properties as { name: string }).name;
-            const valueText = datum ? datum.value.toFixed(1) : labels.noData;
-            lyr.bindTooltip(`${name}: ${valueText}`, { sticky: true, direction: "top" });
-            lyr.on({
-              mouseover: (e) => (e.target as import("leaflet").Path).setStyle({ weight: 1.4 }),
-              mouseout: (e) => (e.target as import("leaflet").Path).setStyle({ weight: 0.5 }),
-            });
-          },
-        }).addTo(map);
+      const layer = L.geoJSON(fc as unknown as GeoJsonObject, {
+        style: (featObj) => {
+          const datum = featObj ? byId.get(String((featObj as { id?: unknown }).id)) : undefined;
+          return {
+            // El color de relleno y trazo lo pone el CSS (por className) para heredar el
+            // tema; Leaflet solo controla grosor y opacidad.
+            className: datum ? `mr-country step-${datum.step}` : "mr-country no-data",
+            weight: 0.5,
+            fillOpacity: 1,
+          };
+        },
+        onEachFeature: (featObj, lyr) => {
+          const id = String((featObj as { id?: unknown }).id);
+          const datum = byId.get(id);
+          const name = datum ? datum.name : (featObj.properties as { name: string }).name;
+          const valueText = datum ? datum.value.toFixed(1) : labels.noData;
+          lyr.bindTooltip(`${name}: ${valueText}`, { sticky: true, direction: "top" });
+          lyr.on({
+            mouseover: (e) => (e.target as import("leaflet").Path).setStyle({ weight: 1.4 }),
+            mouseout: (e) => (e.target as import("leaflet").Path).setStyle({ weight: 0.5 }),
+          });
+        },
+      }).addTo(map);
 
-        const bounds = layer.getBounds();
-        map.fitBounds(bounds, { padding: [8, 8] });
-        // No dejar arrastrar el mundo fuera de cuadro ni alejar más allá del encuadre.
-        map.setMaxBounds(bounds.pad(0.15));
-        map.setMinZoom(map.getZoom());
-        map.invalidateSize();
-
-        mapRef.current = map;
-        if (!cancelled) setReady(true);
-      } catch {
-        // Silencio deliberado: el SVG servido sigue visible como fallback.
-      }
+      bounds = layer.getBounds();
+      map.setMaxBounds(bounds.pad(0.15)); // no dejar arrastrar el mundo fuera de cuadro
+      mapRef.current = map;
+      setReady(true);
     }
 
-    // La sección va en una pestaña que arranca oculta (display:none), así que al montar
-    // el contenedor mide 0. Inicializar Leaflet ahí lo dejaría en blanco. Se difiere la
-    // construcción hasta que el contenedor es visible, y en cambios de tamaño
-    // posteriores (mostrar la pestaña, redimensionar la ventana) se revalida el lienzo.
-    const visible = () => el.clientWidth > 0 && el.clientHeight > 0;
-    const ro = new ResizeObserver(() => {
-      if (!visible()) return;
-      if (!built) build();
-      else mapRef.current?.invalidateSize();
+    /** Construye (si hace falta) y reencuadra, solo cuando el contenedor es visible.
+     *  Síncrono: seguro llamarlo desde cualquier disparador. */
+    function tryRender() {
+      if (cancelled || !libs || !visible()) return;
+      build();
+      fit();
+    }
+
+    // Se precargan las librerías al montar, SIN esperar a que el mapa sea visible. Así,
+    // cuando el usuario abre la pestaña, `build()` ya puede correr de forma síncrona.
+    (async () => {
+      const L = await import("leaflet");
+      const { feature } = await import("topojson-client");
+      const worldMod = await import("world-atlas/countries-110m.json");
+      if (cancelled) return;
+      libs = { L, feature, world: worldMod.default ?? worldMod };
+      tryRender(); // por si la sección ya está visible cuando terminan de cargar
+    })().catch(() => {
+      // Silencio deliberado: el SVG servido sigue visible como fallback.
     });
+
+    // Disparador PRINCIPAL: la sección se muestra/oculta cambiando `data-active-section`
+    // en el <body> (ver section-nav). Observar ese atributo es más fiable que observar
+    // la visibilidad del elemento: un ResizeObserver/IntersectionObserver no dispara de
+    // forma fiable al pasar de `display:none` a visible cuando quien se oculta es un
+    // ancestro. Al cambiar de pestaña, se intenta construir/reencuadrar.
+    const mo = new MutationObserver(() => tryRender());
+    mo.observe(document.body, { attributes: true, attributeFilter: ["data-active-section"] });
+
+    // Complemento: reencuadrar cuando cambia el tamaño con el mapa ya visible
+    // (redimensionar la ventana, girar el móvil).
+    const ro = new ResizeObserver(() => tryRender());
     ro.observe(el);
-    if (visible()) build();
+
+    tryRender();
 
     return () => {
       cancelled = true;
+      mo.disconnect();
       ro.disconnect();
       if (map) map.remove();
       mapRef.current = null;
@@ -202,10 +227,7 @@ export function LeafletMap({
         <button
           type="button"
           className="map-reset"
-          onClick={() => {
-            const m = mapRef.current;
-            if (m) m.setZoom(m.getMinZoom());
-          }}
+          onClick={() => fitRef.current?.()}
           title={labels.reset}
         >
           {labels.reset}
