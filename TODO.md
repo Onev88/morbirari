@@ -37,3 +37,25 @@ congelados en el momento de la primera carga.
   que hoy solo reingiere Orphanet una vez al mes).
 
 **Origen:** decisión de la sesión «Morbi Rari rare disease system» (2026-07-16).
+
+## Fuentes bajo acuerdo
+
+### Solicitud a Orphanet para el directorio de recursos expertos
+
+**Estado:** decidido ([ADR 0006](docs/adr/0006-a-donde-acudir-fuentes-libres-orphanet-mas-adelante.md)), sin iniciar.
+
+El directorio de Orphanet (centros expertos, asociaciones de pacientes, registros,
+biobancos) es la mejor respuesta a «a dónde acudir», pero **no es de descarga libre**:
+requiere un Data Transfer Agreement (uso académico) o un contrato de servicio (comercial).
+
+La ADR 0006 decide ir primero con **fuentes libres** (GARD, ROR, Wikidata) y **más
+adelante cursar la solicitud a Orphanet** para ver qué acceso es posible.
+
+**Lo que hace falta:**
+
+- Contactar al equipo de Orphadata (https://www.orphadata.com/expert-resources/) y
+  determinar la vía aplicable (DTA académico vs contrato de servicio).
+- Al firmar: actualizar [DATA_LICENSES.md](DATA_LICENSES.md) y escribir el adaptador —el
+  patrón `fetch → parse → validate → load` ya existe—.
+
+**Origen:** sesión de 2026-07-17.
