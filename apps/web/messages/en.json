@@ -104,6 +104,11 @@
     "trialsFilterEmpty": "No trial has a centre in the selected place.",
     "trialsShowing": "Showing {shown} of {total}",
     "otherCentres": "Show {count, plural, one {1 other centre} other {# other centres}}",
+    "organizations": "Patient organizations",
+    "organizationsIntro": "Organizations that support and inform people living with this disease. This is support, not medical care; the specialist finder or registry they link to, where shown, belongs to the organization itself.",
+    "orgSpecialists": "Find specialists",
+    "orgRegistry": "Patient registry",
+    "organizationsAttribution": "Source: GARD (NCATS/NIH). This site is not endorsed by the NIH. Some organizations may be missing.",
     "drugs": "Drugs",
     "drugsIntro": "Medicines holding an orphan designation for this disease at regulatory agencies.",
     "drugsWarning": "An orphan designation does NOT mean the drug is approved, available, or effective. It means an agency has recognised that it is being developed for a rare disease. Many designations never become a medicine.",
@@ -141,7 +146,8 @@
       "hpo": "Clinical signs (Human Phenotype Ontology)",
       "regulators": "Orphan drug designations (EMA, FDA)",
       "nando": "Japanese name and identifier",
-      "identifiers": "Gene and protein identifiers (HGNC, Ensembl, UniProt, OMIM)"
+      "identifiers": "Gene and protein identifiers (HGNC, Ensembl, UniProt, OMIM)",
+      "gard": "Patient organizations"
     },
     "retrievedLabel": "Data retrieved"
   },

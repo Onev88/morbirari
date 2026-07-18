@@ -443,6 +443,109 @@ def ingest_trials(
     )
 
 
+@ingest_app.command("gard")
+def ingest_gard(
+    limit: int = typer.Option(0, help="Máximo de enfermedades a consultar (0 = todas)"),
+    resume: bool = typer.Option(
+        True, help="Saltar las enfermedades que ya tienen organizaciones cargadas"
+    ),
+    only: str = typer.Option("", help="IDs de GARD concretos, separados por comas"),
+    force: bool = typer.Option(False, help="Reingerir aunque nada haya cambiado"),  # noqa: ARG001
+) -> None:
+    """Ingiere organizaciones de pacientes desde GARD (NCATS/NIH, dominio público).
+
+    Apoyo e información para pacientes, **no atención médica** (ADR 0006). El vínculo con
+    la enfermedad se hace por el ID de GARD que Orphanet publica, no por texto.
+    """
+    import httpx
+
+    from morbirari_etl.loaders import science as sci_loader
+    from morbirari_etl.sources.gard import organizations as gard
+
+    Session = get_sessionmaker()
+    console.print("[bold]GARD[/bold] · organizaciones de pacientes")
+
+    artifact = gard.fetch_accounts()
+    accounts = gard.account_index(artifact)
+
+    with Session() as session:
+        source = pg.upsert_source(
+            session,
+            name=gard.SOURCE_NAME,
+            license_spdx=None,  # obra del gobierno de EE.UU., sin identificador SPDX
+            attribution_text=gard.ATTRIBUTION,
+            homepage="https://rarediseases.info.nih.gov",
+            redistributable=True,
+        )
+        run = pg.start_run(session, source, artifact.sha256, artifact.source_version)
+        prov = pg.make_provenance(session, source, run, artifact.source_version, artifact.source_url)
+        session.commit()
+        run_id, prov_id = run.id, prov.id
+
+    with Session() as session:
+        targets = sci_loader.gard_ids_by_disease(session, skip_existing=resume and not only)
+    if only:
+        wanted = {c.strip() for c in only.split(",") if c.strip()}
+        with Session() as session:
+            targets = [t for t in sci_loader.gard_ids_by_disease(session) if t[1] in wanted]
+    if limit:
+        targets = targets[:limit]
+
+    console.print(
+        f"[bold]{len(targets)}[/bold] enfermedades por consultar"
+        + (" (reanudando)" if resume and not only else "")
+    )
+    if not targets:
+        console.print("  [dim]nada que hacer[/dim]")
+        return
+
+    total_links = with_orgs = errors = 0
+    with httpx.Client(follow_redirects=True) as client:
+        for i, (disease_id, gard_id) in enumerate(targets, 1):
+            try:
+                pairs = list(gard.fetch_disease_orgs(gard_id, client))
+            except Exception as exc:  # noqa: BLE001
+                errors += 1
+                if errors <= 3:
+                    console.print(f"  [yellow]GARD {gard_id}: {exc}[/yellow]")
+                continue
+
+            staged = [gard.build_org(name, website, accounts) for name, website in pairs]
+            if not staged:
+                continue
+
+            with Session() as session:
+                prov_obj = session.get(Provenance, prov_id)
+                org_id_by_sid = sci_loader.load_organizations(session, staged, prov_obj)
+                org_ids = [
+                    org_id_by_sid[s.source_id] for s in staged if s.source_id in org_id_by_sid
+                ]
+                n = sci_loader.link_disease_organizations(session, disease_id, org_ids, prov_obj)
+                session.commit()
+            total_links += n
+            with_orgs += 1
+
+            if i % 200 == 0:
+                console.print(
+                    f"  [dim]{i}/{len(targets)} · {with_orgs} con orgs · {total_links} vínculos[/dim]"
+                )
+
+    with Session() as session:
+        run_obj = session.get(IngestRun, run_id)
+        pg.finish_run(
+            session,
+            run_obj,
+            "success",
+            {"enfermedades_con_orgs": with_orgs, "vinculos": total_links, "errores": errors},
+        )
+        session.commit()
+
+    console.print(
+        f"  [green]OK[/green] {with_orgs} enfermedades con organizaciones · "
+        f"{total_links} vínculos · {errors} errores"
+    )
+
+
 @ingest_app.command("classifications")
 def ingest_classifications(
     lang: str = typer.Option(",".join(ACTIVE_LANGS), help="Idiomas separados por comas"),

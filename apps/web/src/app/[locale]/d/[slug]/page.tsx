@@ -10,6 +10,7 @@ import {
   getGeographicPrevalence,
   getJapanDesignation,
   getKeyFacts,
+  getOrganizations,
   getOtherLanguageLabels,
   getPhenotypes,
   getSubtypeGenes,
@@ -87,6 +88,7 @@ export default async function DiseasePage({ params }: Props) {
     classifications,
     trials,
     drugs,
+    organizations,
     otherLangs,
     jpDesignation,
   ] = await Promise.all([
@@ -97,6 +99,7 @@ export default async function DiseasePage({ params }: Props) {
     getClassificationContext(detail.disease.orpha_code, locale),
     getTrials(detail.disease.id),
     getDrugs(detail.disease.id),
+    getOrganizations(detail.disease.id),
     getOtherLanguageLabels(detail.disease.id, [...routing.locales]),
     getJapanDesignation(detail.disease.id),
   ]);
@@ -194,8 +197,14 @@ export default async function DiseasePage({ params }: Props) {
     ...(genes.length > 0 || subtypeGenes.length > 0
       ? [{ id: "genes", label: td("genes"), count: genes.length || subtypeGenes.length }]
       : []),
-    ...(trials.length > 0
-      ? [{ id: "donde-acudir", label: td("whereToGo"), count: recruiting.length }]
+    ...(trials.length > 0 || organizations.length > 0
+      ? [
+          {
+            id: "donde-acudir",
+            label: td("whereToGo"),
+            count: trials.length > 0 ? recruiting.length : organizations.length,
+          },
+        ]
       : []),
     ...(drugs.length > 0 ? [{ id: "farmacos", label: td("drugs"), count: drugs.length }] : []),
     ...(classifications.length > 0 ? [{ id: "clasificacion", label: td("classification") }] : []),
@@ -617,23 +626,78 @@ export default async function DiseasePage({ params }: Props) {
         </section>
       )}
 
-      {trials.length > 0 && (
+      {(trials.length > 0 || organizations.length > 0) && (
         <section className="block" id="donde-acudir">
           <h2>{td("whereToGo")}</h2>
-          {/*
-            Este encuadre no es un adorno legal: sin él, una lista de ensayos se lee
-            como «aquí me curan». Un ensayo es investigación, tiene criterios de
-            entrada y no es asistencia.
-          */}
-          <p className="section-intro">{td("whereToGoIntro")}</p>
-          <div className="notice inline">{td("trialsWarning")}</div>
 
-          <TrialList
-            trials={trialVMs}
-            filterGroups={trialFilterGroups}
-            labels={{ geoLabel: tSearch("geoLabel"), geoAll: tSearch("geoAll") }}
-          />
-          <p className="hint">{td("trialsAttribution")}</p>
+          {trials.length > 0 && (
+            <>
+              {/*
+                Este encuadre no es un adorno legal: sin él, una lista de ensayos se lee
+                como «aquí me curan». Un ensayo es investigación, tiene criterios de
+                entrada y no es asistencia.
+              */}
+              <p className="section-intro">{td("whereToGoIntro")}</p>
+              <div className="notice inline">{td("trialsWarning")}</div>
+
+              <TrialList
+                trials={trialVMs}
+                filterGroups={trialFilterGroups}
+                labels={{ geoLabel: tSearch("geoLabel"), geoAll: tSearch("geoAll") }}
+              />
+              <p className="hint">{td("trialsAttribution")}</p>
+            </>
+          )}
+
+          {/*
+            Asociaciones de pacientes (GARD, dominio público). Apoyo e información, NO
+            atención médica (ADR 0006, regla 17). El buscador de especialistas o el
+            registro que enlaza son de la propia organización, no una indicación nuestra.
+          */}
+          {organizations.length > 0 && (
+            <>
+              <h3 className="subsection-title">{td("organizations")}</h3>
+              <p className="section-intro">{td("organizationsIntro")}</p>
+              <ul className="org-list">
+                {organizations.map((o) => (
+                  <li key={o.name} className="org">
+                    <div className="org-head">
+                      {o.website ? (
+                        <a
+                          className="org-name"
+                          href={o.website}
+                          rel="noreferrer nofollow"
+                          target="_blank"
+                        >
+                          {o.name}
+                        </a>
+                      ) : (
+                        <span className="org-name">{o.name}</span>
+                      )}
+                      {o.country && (
+                        <span className="dim small">{localizeArea(o.country, locale)}</span>
+                      )}
+                    </div>
+                    {(o.expertDirectoryUrl || o.patientRegistryUrl) && (
+                      <div className="org-links">
+                        {o.expertDirectoryUrl && (
+                          <a href={o.expertDirectoryUrl} rel="noreferrer nofollow" target="_blank">
+                            {td("orgSpecialists")}
+                          </a>
+                        )}
+                        {o.patientRegistryUrl && (
+                          <a href={o.patientRegistryUrl} rel="noreferrer nofollow" target="_blank">
+                            {td("orgRegistry")}
+                          </a>
+                        )}
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              <p className="hint">{td("organizationsAttribution")}</p>
+            </>
+          )}
         </section>
       )}
 
@@ -801,6 +865,14 @@ export default async function DiseasePage({ params }: Props) {
             <li className="source">
               <span className="source-name">EMA · FDA</span>
               <span className="source-desc">{tProv("src.regulators")}</span>
+            </li>
+          )}
+          {organizations.length > 0 && (
+            <li className="source">
+              <a href="https://rarediseases.info.nih.gov" rel="noreferrer nofollow" target="_blank">
+                GARD
+              </a>
+              <span className="source-desc">{tProv("src.gard")}</span>
             </li>
           )}
           {(jpDesignation || otherLangs.some((o) => o.lang === "ja")) && (

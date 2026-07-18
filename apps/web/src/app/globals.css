@@ -1058,6 +1058,53 @@ section.block h2 {
   margin-top: 8px;
 }
 
+/* ---------------------------------------------------- asociaciones de pacientes */
+
+.org-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.org {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+}
+
+.org-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.org-name {
+  font-weight: 550;
+  font-size: 0.92rem;
+  text-decoration: none;
+}
+
+a.org-name:hover {
+  text-decoration: underline;
+}
+
+.org-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 6px;
+  font-size: 0.82rem;
+}
+
+.org-links a:hover {
+  text-decoration: underline;
+}
+
 /* ---------------------------------------------------------- actividad reciente */
 
 /*

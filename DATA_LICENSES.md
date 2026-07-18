@@ -25,7 +25,7 @@ documento que nadie lee se desincroniza; la columna no.
 | **EMA** (designaciones huérfanas) | Datos abiertos | Sí | **En uso** |
 | **NANDO / NanbyoData** (Japón) | CC BY 4.0 | Sí | **En uso** |
 | MONDO | CC BY 4.0 | Sí, con matices | Pendiente |
-| GARD (NCATS/NIH) | Dominio público EE.UU. | Sí | Pendiente (ya tenemos sus IDs) |
+| **GARD (NCATS/NIH)** | Dominio público EE.UU. | Sí | **En uso** (asociaciones de pacientes) |
 | PubMed | Mixto | Solo metadatos | Pendiente |
 | **Orphanet: centros expertos, asociaciones de pacientes, fármacos** | **Requiere acuerdo** | **NO sin firmar** | **Descartado** |
 | **OMIM** | **Propietario (JHU)** | **NO** | **Solo identificadores** |
@@ -117,9 +117,15 @@ adaptador.
 
 ## GARD (NIH)
 
-- Obra del gobierno de EE.UU., de libre uso. **No implicar respaldo.**
-- Todavía no se ingiere su contenido; sí tenemos sus identificadores (3.825) vía los
-  alineamientos de Orphanet, lo que permite enlazar a sus fichas.
+- Obra del gobierno de EE.UU., de libre uso. **No implicar respaldo** del NIH/NCATS.
+- **Qué usamos (ADR 0006):** el directorio de **asociaciones de pacientes** por enfermedad.
+  El sitio de GARD sirve JSON estáticos; se ingiere la lista de cuentas
+  (`all-account-data.json`) y, por enfermedad, sus organizaciones (`singles/{gardId}.json`).
+  El vínculo con nuestra enfermedad se hace por el **ID de GARD que Orphanet publica**
+  (3.825), no por texto.
+- **Encuadre:** apoyo e información, **no atención médica**. El buscador de especialistas o
+  el registro de pacientes que se enlaza son de la propia organización, no una recomendación
+  nuestra (regla 17).
 
 ## PubMed
 

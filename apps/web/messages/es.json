@@ -104,6 +104,11 @@
     "trialsFilterEmpty": "Ningún ensayo con un centro en el lugar elegido.",
     "trialsShowing": "Mostrando {shown} de {total}",
     "otherCentres": "Ver {count, plural, one {otro centro} other {otros # centros}}",
+    "organizations": "Asociaciones de pacientes",
+    "organizationsIntro": "Organizaciones que acompañan e informan a quienes viven con esta enfermedad. Son apoyo, no atención médica; el buscador de especialistas o el registro que enlazan, cuando aparecen, son de la propia organización.",
+    "orgSpecialists": "Buscar especialistas",
+    "orgRegistry": "Registro de pacientes",
+    "organizationsAttribution": "Fuente: GARD (NCATS/NIH). Este sitio no está avalado por los NIH. Puede haber organizaciones fuera de esta lista.",
     "drugs": "Fármacos",
     "drugsIntro": "Medicamentos con designación huérfana para esta enfermedad en las agencias reguladoras.",
     "drugsWarning": "Una designación huérfana NO significa que el fármaco esté aprobado, disponible ni que sea eficaz. Significa que una agencia ha reconocido que se está desarrollando para una enfermedad rara. Muchas designaciones nunca llegan a ser un medicamento.",
@@ -141,7 +146,8 @@
       "hpo": "Signos clínicos (Human Phenotype Ontology)",
       "regulators": "Designaciones de fármacos huérfanos (EMA, FDA)",
       "nando": "Denominación e identificador en Japón",
-      "identifiers": "Identificadores de genes y proteínas (HGNC, Ensembl, UniProt, OMIM)"
+      "identifiers": "Identificadores de genes y proteínas (HGNC, Ensembl, UniProt, OMIM)",
+      "gard": "Asociaciones de pacientes"
     },
     "retrievedLabel": "Datos recuperados"
   },

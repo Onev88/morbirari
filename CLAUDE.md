@@ -131,6 +131,7 @@ se contradicen, es un bug: páralo y avisa, no lo repliques.
 | `mr ingest classifications --lang en,es` | Jerarquía por especialidad. |
 | `mr ingest trials` | Ensayos abiertos, centros y promotores. Reanudable (`--resume`). |
 | `mr ingest drugs` | Designaciones huérfanas de la EMA. |
+| `mr ingest gard` | Asociaciones de pacientes (GARD). Reanudable (`--resume`). |
 | `mr ingest nando` | Nombres en japonés y designación nipona. |
 | `mr index rebuild --lang es` | Reconstruye el índice desde Postgres. Seguro siempre. |
 | `mr status` | Qué hay cargado, de qué versión y desde cuándo. |

@@ -547,6 +547,45 @@ export function buildRecentActivity(
   return items.slice(0, limit);
 }
 
+export type OrganizationRow = {
+  name: string;
+  website: string | null;
+  country: string | null;
+  patientRegistryUrl: string | null;
+  expertDirectoryUrl: string | null;
+};
+
+/**
+ * Asociaciones de pacientes de una enfermedad, de GARD (dominio público).
+ *
+ * Es apoyo e información, **no atención médica** (ADR 0006). El buscador de especialistas
+ * o el registro de pacientes que enlaza son de la propia organización.
+ */
+export async function getOrganizations(diseaseId: string): Promise<OrganizationRow[]> {
+  const rows = await sql<
+    {
+      name: string;
+      website: string | null;
+      country: string | null;
+      patient_registry_url: string | null;
+      expert_directory_url: string | null;
+    }[]
+  >`
+    SELECT o.name, o.website, o.country, o.patient_registry_url, o.expert_directory_url
+    FROM disease_organization dorg
+    JOIN organization o ON o.id = dorg.organization_id
+    WHERE dorg.disease_id = ${diseaseId} AND o.status = 'active'
+    ORDER BY o.name
+  `;
+  return rows.map((r) => ({
+    name: r.name,
+    website: r.website,
+    country: r.country,
+    patientRegistryUrl: r.patient_registry_url,
+    expertDirectoryUrl: r.expert_directory_url,
+  }));
+}
+
 /** Nombres en otros idiomas fuera de los que sirve la interfaz (hoy, japonés). */
 export async function getOtherLanguageLabels(
   diseaseId: string,

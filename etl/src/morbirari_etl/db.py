@@ -441,6 +441,64 @@ class DiseaseDrug(Base):
     __table_args__ = (UniqueConstraint("disease_id", "drug_id", name="uq_disease_drug"),)
 
 
+class Organization(Base):
+    """Organización de pacientes (fundación, asociación) de una enfermedad rara.
+
+    Es **apoyo e información, no atención médica ni consejo clínico**. Fuente: GARD
+    (NCATS/NIH), dominio público. El buscador de especialistas (`expert_directory_url`) o
+    el registro de pacientes (`patient_registry_url`) que enlaza son *de la propia
+    organización*, no una recomendación nuestra: enlazamos su directorio, no dirigimos a
+    nadie a un sitio concreto (regla 17).
+    """
+
+    __tablename__ = "organization"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    source_ns: Mapped[str] = mapped_column(String(16), index=True)  # GARD
+    # Identificador de cuenta en GARD (Salesforce): clave natural estable.
+    source_id: Mapped[str] = mapped_column(String(64))
+    name: Mapped[str] = mapped_column(Text)
+    website: Mapped[str | None] = mapped_column(Text)
+    country: Mapped[str | None] = mapped_column(String(64))
+    patient_registry_url: Mapped[str | None] = mapped_column(Text)
+    expert_directory_url: Mapped[str | None] = mapped_column(Text)
+    record_type: Mapped[str | None] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(16), default="active", server_default="active")
+    provenance_id: Mapped[int | None] = mapped_column(
+        ForeignKey("provenance.id", ondelete="SET NULL")
+    )
+
+    __table_args__ = (UniqueConstraint("source_ns", "source_id", name="uq_organization"),)
+
+
+class DiseaseOrganization(Base):
+    """Vínculo enfermedad-organización.
+
+    Mapeado por el identificador de GARD que Orphanet publica para cada enfermedad, así
+    que es un vínculo de la propia GARD, no una inferencia de texto como en los fármacos.
+    """
+
+    __tablename__ = "disease_organization"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    disease_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("disease.id", ondelete="CASCADE"), index=True
+    )
+    organization_id: Mapped[int] = mapped_column(
+        ForeignKey("organization.id", ondelete="CASCADE")
+    )
+    match_method: Mapped[str] = mapped_column(String(32))  # gard_id
+    provenance_id: Mapped[int | None] = mapped_column(
+        ForeignKey("provenance.id", ondelete="SET NULL")
+    )
+
+    organization: Mapped[Organization] = relationship()
+
+    __table_args__ = (
+        UniqueConstraint("disease_id", "organization_id", name="uq_disease_organization"),
+    )
+
+
 class Classification(Base):
     """Una de las ~33 clasificaciones de Orphanet, por especialidad médica."""
 

@@ -22,11 +22,13 @@ from morbirari_etl.db import (
     DiseaseDrug,
     DiseaseGene,
     DiseaseLabel,
+    DiseaseOrganization,
     DiseasePhenotype,
     DiseaseTrial,
     DiseaseXref,
     Epidemiology,
     Gene,
+    Organization,
     OrphanDrug,
     Phenotype,
     PhenotypeLabel,
@@ -37,6 +39,7 @@ from morbirari_etl.db import (
 from morbirari_etl.loaders.postgres import assert_no_omim_text
 from morbirari_etl.sources.clinicaltrials.trials import StagedTrial
 from morbirari_etl.sources.ema.orphan_drugs import StagedDrug, normalize
+from morbirari_etl.sources.gard.organizations import StagedOrg
 from morbirari_etl.sources.hpo.translations import StagedTranslation
 from morbirari_etl.sources.nando.japan import StagedNando
 from morbirari_etl.sources.orphanet.classifications import StagedClassification
@@ -705,6 +708,113 @@ def mesh_ids_by_disease(
         )
     rows = session.execute(stmt.order_by(Disease.orpha_code)).all()
     return [(r[0], r[1], r[2]) for r in rows]
+
+
+def gard_ids_by_disease(
+    session: Session, skip_existing: bool = False
+) -> list[tuple[object, str]]:
+    """(disease_id, gard_id) de las enfermedades con ID de GARD publicado por Orphanet.
+
+    `skip_existing` deja fuera las que ya tienen organizaciones cargadas, para que la
+    ingesta sea reanudable: son ~3.800 consultas a un servicio público, y un proceso
+    interrumpido no debe empezar de cero.
+    """
+    stmt = (
+        select(Disease.id, DiseaseXref.source_id)
+        .join(DiseaseXref, DiseaseXref.disease_id == Disease.id)
+        .where(DiseaseXref.source_ns == "GARD", Disease.status == "active")
+    )
+    if skip_existing:
+        stmt = stmt.where(
+            ~select(DiseaseOrganization.id)
+            .where(DiseaseOrganization.disease_id == Disease.id)
+            .exists()
+        )
+    rows = session.execute(stmt.order_by(DiseaseXref.source_id)).all()
+    return [(r[0], r[1]) for r in rows]
+
+
+def load_organizations(
+    session: Session, orgs: Iterable[StagedOrg], prov: Provenance
+) -> dict[str, int]:
+    """Upsert de organizaciones por su clave natural. Devuelve {source_id: id} del lote."""
+    staged = list(orgs)
+    for batch in _batched(staged):
+        values = _dedupe(
+            [
+                {
+                    "source_ns": "GARD",
+                    "source_id": o.source_id,
+                    "name": o.name,
+                    "website": o.website,
+                    "country": o.country,
+                    "patient_registry_url": o.patient_registry_url,
+                    "expert_directory_url": o.expert_directory_url,
+                    "record_type": o.record_type,
+                    "status": "active",
+                    "provenance_id": prov.id,
+                }
+                for o in batch
+            ],
+            "source_ns",
+            "source_id",
+        )
+        if values:
+            session.execute(
+                insert(Organization)
+                .values(values)
+                .on_conflict_do_update(
+                    constraint="uq_organization",
+                    set_={
+                        "name": insert(Organization).excluded.name,
+                        "website": insert(Organization).excluded.website,
+                        "country": insert(Organization).excluded.country,
+                        "patient_registry_url": insert(Organization).excluded.patient_registry_url,
+                        "expert_directory_url": insert(Organization).excluded.expert_directory_url,
+                        "record_type": insert(Organization).excluded.record_type,
+                        "status": "active",
+                        "provenance_id": prov.id,
+                    },
+                )
+            )
+    sids = [o.source_id for o in staged]
+    if not sids:
+        return {}
+    return {
+        sid: oid
+        for sid, oid in session.execute(
+            select(Organization.source_id, Organization.id).where(
+                Organization.source_ns == "GARD", Organization.source_id.in_(sids)
+            )
+        ).all()
+    }
+
+
+def link_disease_organizations(
+    session: Session, disease_id: object, org_ids: Iterable[int], prov: Provenance
+) -> int:
+    """Enlaza una enfermedad con sus organizaciones. Devuelve el número de vínculos."""
+    values = _dedupe(
+        [
+            {
+                "disease_id": disease_id,
+                "organization_id": oid,
+                "match_method": "gard_id",
+                "provenance_id": prov.id,
+            }
+            for oid in org_ids
+        ],
+        "disease_id",
+        "organization_id",
+    )
+    if not values:
+        return 0
+    session.execute(
+        insert(DiseaseOrganization)
+        .values(values)
+        .on_conflict_do_nothing(constraint="uq_disease_organization")
+    )
+    return len(values)
 
 
 def load_classifications(
