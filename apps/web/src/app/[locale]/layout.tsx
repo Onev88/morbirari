@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { routing } from "@/i18n/routing";
 import { ThemeToggle } from "./theme-toggle";
 import { DisclaimerBanner } from "./disclaimer-banner";
+import { LangSwitch } from "./lang-switch";
 import "../globals.css";
 
 export function generateStaticParams() {
@@ -80,13 +81,7 @@ export default async function LocaleLayout({
                     dark: tTheme("dark"),
                   }}
                 />
-                <nav className="lang-switch" aria-label={tNav("language")}>
-                  {routing.locales.map((l) => (
-                    <a key={l} href={`/${l}`} className={l === locale ? "active" : ""}>
-                      {l.toUpperCase()}
-                    </a>
-                  ))}
-                </nav>
+                <LangSwitch current={locale} label={tNav("language")} />
               </div>
             </div>
           </header>
