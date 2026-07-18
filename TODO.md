@@ -5,38 +5,31 @@ fondo van en [docs/adr/](docs/adr/); esto es la lista de lo que falta por hacer.
 
 ## Frescura de datos volátiles
 
-### Caducidad a 30 días en la ingesta de ensayos clínicos
+### Programar el `--resume` periódico de ensayos clínicos
 
-**Estado:** decidido, sin implementar.
+**Estado:** la caducidad ya está **implementada**; falta **programar** la ejecución periódica.
 
 Los ensayos clínicos (ClinicalTrials.gov) son **datos volátiles**: un ensayo abre,
 cambia de estado de reclutamiento y cierra. La [ADR 0001](docs/adr/0001-own-index-not-federation.md)
 ya avisa de que necesitan una cadencia de refresco propia.
 
-Hoy `mr ingest trials` ([`__main__.py:338`](etl/src/morbirari_etl/__main__.py)) solo tiene
-`--resume`, que hace `skip_existing`: **salta las enfermedades que ya tienen ensayos
-cargados**, sin mirar la fecha. Consecuencia: un ensayo cargado una vez **no se
-refresca nunca**. Los datos de «dónde acudir» y «si están reclutando» se quedan
-congelados en el momento de la primera carga.
+**Ya hecho** (commit «Registrar la consulta de ensayos, no solo el resultado»): la tabla
+`trial_query` anota **cuándo** se consultó cada enfermedad —con resultado o sin él, porque
+«no hay ensayos abiertos» también es una respuesta que hay que recordar—, y solo un error de
+la fuente queda sin anotar para reintentarse. `mr ingest trials` gana `--refresh-after=30`
+(días): en un `--resume`, vuelve a consultar lo caducado en vez de saltarlo por existir. El
+filtro vive en `mesh_ids_by_disease(..., fresh_for_days=...)`
+([`loaders/science.py`](etl/src/morbirari_etl/loaders/science.py)); la migración de estreno
+rellena las enfermedades ya cargadas fechándolas por la procedencia de sus vínculos.
 
-**Lo que se decidió:**
+**Lo que falta:** disparar ese `--resume` de forma **periódica**. Hoy
+[etl-scheduled.yml](.github/workflows/etl-scheduled.yml) solo reingiere Orphanet una vez al
+mes; hay que ampliarlo con un `mr ingest trials --resume` en una cadencia propia (más frecuente
+que la anual de Orphanet), para que el refresco de «dónde acudir» y «si están reclutando»
+ocurra sin intervención manual.
 
-- Añadir `--refresh-after=30` (días): en un `--resume`, volver a consultar todo lo que
-  se trajo hace más de 30 días, en vez de saltarlo por existir.
-- Si una consulta **falla, no anotar nada** (no marcar como «fresco» algo que no se
-  pudo traer): así el siguiente `--resume` lo reintenta.
-- Un `--resume` periódico refresca lo viejo por sí solo, sin intervención manual.
-
-**Lo que hace falta para implementarlo:**
-
-- Guardar **cuándo** se trajo cada enfermedad/ensayo (un `fetched_at`), que hoy no
-  existe. Comparar contra el umbral en `mesh_ids_by_disease(..., skip_existing=...)`
-  ([`loaders/science.py`](etl/src/morbirari_etl/loaders/science.py)).
-- Distinguir «cargado y fresco» de «cargado y caducado» de «nunca cargado».
-- Programar el `--resume` periódico (ampliar [etl-scheduled.yml](.github/workflows/etl-scheduled.yml),
-  que hoy solo reingiere Orphanet una vez al mes).
-
-**Origen:** decisión de la sesión «Morbi Rari rare disease system» (2026-07-16).
+**Origen:** decisión de la sesión «Morbi Rari rare disease system» (2026-07-16); caducidad
+implementada e integrada el 2026-07-18.
 
 ## Fuentes bajo acuerdo
 
