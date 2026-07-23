@@ -241,6 +241,87 @@ a {
     min-width: 0;
   }
 
+  .section-nav::after {
+    content: "";
+    position: absolute;
+    top: 8px;
+    right: 0;
+    bottom: 8px;
+    width: 40px;
+    background: linear-gradient(to right, transparent, var(--bg));
+    pointer-events: none;
+    z-index: 6;
+  }
+
+  /* Conversión de tablas técnicas a tarjetas apilables en móvil */
+  .gene-table,
+  .xref-table,
+  .drug-table {
+    display: block;
+    width: 100%;
+  }
+
+  .gene-table thead,
+  .xref-table thead,
+  .drug-table thead {
+    display: none;
+  }
+
+  .gene-table tbody,
+  .xref-table tbody,
+  .drug-table tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .gene-table tr,
+  .xref-table tr,
+  .drug-table tr {
+    display: block;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+
+  .gene-table tr.gene-causing {
+    border-left: 4px solid var(--accent);
+  }
+
+  .gene-table td,
+  .xref-table td,
+  .drug-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px dashed var(--border);
+    text-align: right;
+    font-size: 0.88rem;
+  }
+
+  .gene-table td:last-child,
+  .xref-table td:last-child,
+  .drug-table td:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .gene-table td::before,
+  .xref-table td::before,
+  .drug-table td::before {
+    content: attr(data-label);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    font-weight: 600;
+    text-align: left;
+    padding-right: 8px;
+  }
+
   .section-nav ul {
     flex-direction: row;
     overflow-x: auto;
@@ -285,6 +366,7 @@ body[data-tabs-ready="true"][data-active-section="actividad"] section.block#acti
 body[data-tabs-ready="true"][data-active-section="geografia"] section.block#geografia,
 body[data-tabs-ready="true"][data-active-section="signos"] section.block#signos,
 body[data-tabs-ready="true"][data-active-section="genes"] section.block#genes,
+body[data-tabs-ready="true"][data-active-section="ensayos"] section.block#ensayos,
 body[data-tabs-ready="true"][data-active-section="donde-acudir"] section.block#donde-acudir,
 body[data-tabs-ready="true"][data-active-section="farmacos"] section.block#farmacos,
 body[data-tabs-ready="true"][data-active-section="clasificacion"] section.block#clasificacion,
@@ -305,10 +387,10 @@ section.block[id] {
 
 .site-header .wrap {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 16px;
-  padding-top: 16px;
-  padding-bottom: 16px;
+  padding-top: 12px;
+  padding-bottom: 12px;
 }
 
 .brand {
@@ -327,21 +409,36 @@ section.block[id] {
 
 .lang-switch {
   display: flex;
-  gap: 8px;
-  font-size: 0.85rem;
+  gap: 4px;
+  font-size: 0.95rem;
+  align-items: center;
 }
 
 .lang-switch a {
   text-decoration: none;
-  padding: 2px 8px;
-  border-radius: 4px;
+  min-width: 48px;
+  height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
   color: var(--muted);
+  transition: background-color 0.2s, color 0.2s;
 }
 
 .lang-switch a.active {
   background: var(--accent-soft);
   color: var(--accent);
   font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .site-header .wrap {
+    gap: 12px;
+  }
+  .tagline {
+    display: none;
+  }
 }
 
 main {
@@ -1340,17 +1437,11 @@ a.activity-title:hover {
   }
 
   /* Una tabla ancha se desplaza dentro de su caja; la página nunca se desplaza en
-     horizontal. */
-  .gene-table,
-  .xref-table {
-    display: block;
-    overflow-x: auto;
-    white-space: nowrap;
-  }
-
+     horizontal.
+     En móvil, se aplica la conversión a tarjetas display: block. */
   .gene-table .gene-name {
     white-space: normal;
-    max-width: 200px;
+    max-width: 100%;
   }
 }
 
@@ -1367,7 +1458,7 @@ summary:focus-visible,
 [role="tab"]:focus-visible,
 input:focus-visible,
 select:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 3px solid var(--accent);
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -1421,7 +1512,8 @@ main:focus {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 6px;
+  width: 48px;
+  height: 48px;
   line-height: 0;
   border: 1px solid var(--border);
   border-radius: 99px;
@@ -1429,6 +1521,7 @@ main:focus {
   color: var(--muted);
   cursor: pointer;
   font-family: inherit;
+  transition: border-color 0.2s, color 0.2s;
 }
 
 .theme-toggle:hover {
@@ -1489,6 +1582,59 @@ main:focus {
   margin-bottom: 2px;
 }
 
+.prevalence-leaflet .leaflet-tooltip-bottom::before {
+  border-bottom-color: var(--text);
+}
+
+/* Bloqueo y overlay del mapa en móvil */
+.map-overlay-lock {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  border-radius: var(--radius);
+}
+
+.map-activate-btn {
+  padding: 12px 24px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s, background-color 0.2s;
+}
+
+.map-activate-btn:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+  transform: scale(1.02);
+}
+
+.map-controls .map-lock-toggle {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  min-width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.map-controls .map-lock-toggle:hover {
+  border-color: var(--accent);
+}
+
 .disclaimer-accept {
   flex: none;
   padding: 10px 20px;
@@ -1503,15 +1649,39 @@ main:focus {
 }
 
 @media (max-width: 640px) {
+  .disclaimer-banner {
+    position: fixed;
+    bottom: 12px;
+    left: 12px;
+    right: 12px;
+    border-radius: var(--radius);
+    border: 1px solid var(--warn-border);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  }
+
   .disclaimer-banner-inner {
+    padding: 16px;
+    display: flex;
     flex-direction: column;
-    align-items: stretch;
     gap: 12px;
   }
 
   .disclaimer-banner-body {
-    max-height: 40vh;
+    max-height: 30vh;
     overflow-y: auto;
+    font-size: 0.85rem;
+  }
+
+  .disclaimer-banner-body ul {
+    padding-left: 16px;
+    margin-top: 8px;
+  }
+
+  .disclaimer-accept {
+    width: 100%;
+    text-align: center;
+    padding: 12px;
+    font-size: 0.95rem;
   }
 }
 

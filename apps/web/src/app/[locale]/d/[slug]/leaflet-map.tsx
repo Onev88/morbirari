@@ -8,6 +8,10 @@ import "leaflet/dist/leaflet.css";
 
 import { useEffect, useRef, useState } from "react";
 import type { GeoJsonObject } from "geojson";
+import * as d3 from "d3-geo";
+import * as d3proj from "d3-geo-projection";
+import { feature } from "topojson-client";
+import worldData from "world-atlas/countries-110m.json";
 
 export type CountryDatum = {
   /** ISO numérico (el id de world-atlas), como string. Coincide con `feature.id`. */
@@ -23,6 +27,8 @@ type Labels = {
   reset: string;
   hint: string;
   noData: string;
+  activateMap: string;
+  deactivateMap: string;
 };
 
 /**
@@ -61,6 +67,24 @@ export function LeafletMap({
   // que el botón de reinicio lo use; vive en un ref porque `bounds` está en el efecto.
   const fitRef = useRef<(() => void) | null>(null);
   const [ready, setReady] = useState(false);
+  const [active, setActive] = useState(false);
+
+  // Sincronizar estado activo de interacción con la instancia de Leaflet
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (active) {
+      map.dragging.enable();
+      map.scrollWheelZoom.enable();
+      map.doubleClickZoom.enable();
+      if (map.touchZoom) map.touchZoom.enable();
+    } else {
+      map.dragging.disable();
+      map.scrollWheelZoom.disable();
+      map.doubleClickZoom.disable();
+      if (map.touchZoom) map.touchZoom.disable();
+    }
+  }, [active]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -70,13 +94,7 @@ export function LeafletMap({
     let loading = false;
     let map: import("leaflet").Map | null = null;
     let bounds: import("leaflet").LatLngBounds | null = null;
-    let libs: {
-      L: typeof import("leaflet");
-      feature: typeof import("topojson-client").feature;
-      world: unknown;
-      geoNaturalEarth1: typeof import("d3-geo").geoNaturalEarth1;
-      geoProject: typeof import("d3-geo-projection").geoProject;
-    } | null = null;
+    let L: typeof import("leaflet") | null = null;
 
     // Lienzo de proyección (mismas dimensiones que el SVG servido: así el encuadre y la
     // forma coinciden exactamente).
@@ -108,9 +126,9 @@ export function LeafletMap({
      * idéntico al SVG bonito de antes, pero con zoom, desplazamiento y tooltips.
      */
     function build() {
-      if (!libs || map || !el) return;
-      const { L, feature, world, geoNaturalEarth1, geoProject } = libs;
-      const w = world as { objects: { countries: unknown } } & Parameters<typeof feature>[0];
+      if (!L || map || !el) return;
+      const Leaflet = L;
+      const w = worldData as unknown as Parameters<typeof feature>[0] & { objects: { countries: unknown } };
       const raw = feature(w, w.objects.countries as never) as unknown as {
         type: "FeatureCollection";
         features: { id?: string | number; properties: { name: string }; geometry: unknown }[];
@@ -118,7 +136,7 @@ export function LeafletMap({
       // Fuera la Antártida, igual que en el SVG servido: ni hay datos ni aporta nada.
       const kept = raw.features.filter((f) => f.properties.name !== "Antarctica");
 
-      const projection = geoNaturalEarth1().fitSize([PW, PH], {
+      const projection = d3.geoNaturalEarth1().fitSize([PW, PH], {
         type: "FeatureCollection",
         features: kept,
       } as never);
@@ -131,7 +149,7 @@ export function LeafletMap({
         type: "FeatureCollection" as const,
         features: kept
           .map((f) => {
-            const geometry = geoProject(f.geometry as GeoJsonObject, projection);
+            const geometry = d3proj.geoProject(f.geometry as GeoJsonObject, projection);
             return geometry
               ? { type: "Feature" as const, id: f.id, properties: f.properties, geometry }
               : null;
@@ -141,20 +159,24 @@ export function LeafletMap({
 
       const byId = new Map(data.map((d) => [d.numericId, d]));
 
-      map = L.map(el, {
-        crs: L.CRS.Simple, // plano: las coordenadas ya vienen proyectadas por d3
+      map = Leaflet.map(el, {
+        crs: Leaflet.CRS.Simple, // plano: las coordenadas ya vienen proyectadas por d3
         zoomControl: false, // usamos nuestros propios botones, coherentes con el resto
         attributionControl: false, // sin tiles no hay atribución de mapa que mostrar
         zoomSnap: 0.25,
         minZoom: -10,
         maxZoom: 6,
         inertia: true,
+        dragging: false,
+        scrollWheelZoom: false,
+        doubleClickZoom: false,
+        touchZoom: false,
       });
 
-      const layer = L.geoJSON(projFc as unknown as GeoJsonObject, {
+      const layer = Leaflet.geoJSON(projFc as unknown as GeoJsonObject, {
         // Coordenadas ya proyectadas (píxeles, y hacia abajo). CRS.Simple: lat=-y para
         // que el norte quede arriba.
-        coordsToLatLng: (coords) => L.latLng(-coords[1], coords[0]),
+        coordsToLatLng: (coords) => Leaflet.latLng(-coords[1], coords[0]),
         style: (featObj) => {
           const datum = featObj ? byId.get(String((featObj as { id?: unknown }).id)) : undefined;
           return {
@@ -185,22 +207,12 @@ export function LeafletMap({
     }
 
     async function loadLibs() {
-      if (libs || loading) return;
+      if (L || loading) return;
       loading = true;
       try {
-        const L = await import("leaflet");
-        const topo = await import("topojson-client");
-        const worldMod = await import("world-atlas/countries-110m.json");
-        const d3 = await import("d3-geo");
-        const d3proj = await import("d3-geo-projection");
+        const Leaflet = await import("leaflet");
         if (cancelled) return;
-        libs = {
-          L,
-          feature: topo.feature,
-          world: worldMod.default ?? worldMod,
-          geoNaturalEarth1: d3.geoNaturalEarth1,
-          geoProject: d3proj.geoProject,
-        };
+        L = Leaflet;
       } finally {
         loading = false;
       }
@@ -214,7 +226,7 @@ export function LeafletMap({
      */
     async function activate() {
       if (cancelled || !isSectionActive() || !visible()) return;
-      if (!libs) {
+      if (!L) {
         await loadLibs();
         if (cancelled || !isSectionActive() || !visible()) return;
       }
@@ -246,7 +258,7 @@ export function LeafletMap({
 
   return (
     <div className="map-interactive prevalence-leaflet">
-      <div className="map-viewport leaflet-viewport">
+      <div className="map-viewport leaflet-viewport" style={{ position: "relative" }}>
         {/* Leaflet monta aquí. El contenedor está siempre dimensionado por CSS
             (aspect-ratio) para que Leaflet conozca su tamaño al inicializarse. */}
         <div
@@ -255,6 +267,17 @@ export function LeafletMap({
           role="img"
           aria-label={ariaLabel}
         />
+        {ready && !active && (
+          <div className="map-overlay-lock">
+            <button
+              type="button"
+              className="map-activate-btn"
+              onClick={() => setActive(true)}
+            >
+              {labels.activateMap}
+            </button>
+          </div>
+        )}
         {/* Fallback: el SVG del servidor. Visible hasta que Leaflet está listo; se
             mantiene en el DOM (indexable) pero se oculta a la vista y a accesibilidad
             cuando el mapa interactivo ya lo sustituye. */}
@@ -288,6 +311,17 @@ export function LeafletMap({
         >
           {labels.reset}
         </button>
+        {ready && active && (
+          <button
+            type="button"
+            className="map-lock-toggle"
+            onClick={() => setActive(false)}
+            title={labels.deactivateMap}
+            aria-label={labels.deactivateMap}
+          >
+            🔒
+          </button>
+        )}
       </div>
       <p className="hint map-hint">{labels.hint}</p>
     </div>
