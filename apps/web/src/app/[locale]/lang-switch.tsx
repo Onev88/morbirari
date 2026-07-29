@@ -1,49 +1,63 @@
 "use client";
 
-import { Link, usePathname, useRouter, routing } from "@/i18n/routing";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { routing } from "@/i18n/routing";
 
 /**
- * Conmutador de idioma que **conserva la página actual y la pestaña abierta**.
+ * Conmutador de idioma que conserva la página actual, la búsqueda y la pestaña activa.
  *
- * Antes era un `<a href="/en">` fijo: cambiar de idioma llevaba siempre al home. Aquí
- * `usePathname()` de next-intl da la ruta sin el prefijo de idioma (p. ej.
- * `/d/behcet-disease-orpha-117`), y `<Link locale>` la vuelve a prefijar con el otro
- * idioma, así que se recarga la misma ficha traducida.
- *
- * La pestaña activa de la ficha vive en el **hash** (`#signos-clinicos`, …), que
- * `usePathname()` no incluye: sin más, cambiar de idioma volvía siempre a la primera
- * sección. Por eso, cuando hay hash, interceptamos el clic y navegamos con el hash
- * incluido; al recargar la ficha, `SectionNav` lo lee y restaura la pestaña.
- *
- * El hash se lee **en el momento del clic**, no en render: lo actualiza `SectionNav` con
- * `history.replaceState`, que no dispara ningún evento al que suscribirse, y leerlo así
- * evita además el `useSearchParams`/Suspense que ensuciaría las páginas estáticas. Sin
- * JavaScript el `<Link>` navega igual (sin hash): se pierde la pestaña, pero el fallo abre.
- *
- * La query (`?q=…` del buscador) sigue sin arrastrarse, por el mismo motivo de Suspense.
+ * Resolviendo la ruta completa (incluyendo query y hash) únicamente en el cliente tras el montaje,
+ * evitamos desajustes de hidratación (hydration mismatch) y mantenemos soporte para múltiples
+ * idiomas dinámicamente configurados en 'routing.locales'.
  */
 export function LangSwitch({ current, label }: { current: string; label: string }) {
-  const pathname = usePathname();
-  const router = useRouter();
+  const [paths, setPaths] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const pathname = window.location.pathname;
+    const search = window.location.search || "";
+    const hash = window.location.hash || "";
+
+    const getLocalizedPath = (targetLocale: string) => {
+      if (!pathname) return `/${targetLocale}${search}${hash}`;
+
+      const segments = pathname.split("/");
+      // segments[1] es el prefijo de idioma (es / en / etc.)
+      const knownLocales = routing.locales;
+      if (segments[1] && knownLocales.includes(segments[1] as any)) {
+        segments[1] = targetLocale;
+        return `${segments.join("/")}${search}${hash}`;
+      }
+
+      const cleanPath = pathname === "/" ? "" : pathname;
+      return `/${targetLocale}${cleanPath}${search}${hash}`;
+    };
+
+    const newPaths: Record<string, string> = {};
+    routing.locales.forEach((l) => {
+      newPaths[l] = getLocalizedPath(l);
+    });
+    setPaths(newPaths);
+  }, []);
 
   return (
     <nav className="lang-switch" aria-label={label}>
-      {routing.locales.map((l) => (
-        <Link
-          key={l}
-          href={pathname}
-          locale={l}
-          className={l === current ? "active" : undefined}
-          onClick={(e) => {
-            const hash = window.location.hash;
-            if (!hash) return; // sin hash, el Link hace su navegación normal
-            e.preventDefault();
-            router.push(`${pathname}${hash}`, { locale: l });
-          }}
-        >
-          {l.toUpperCase()}
-        </Link>
-      ))}
+      {routing.locales.map((l) => {
+        // En el primer render (SSR y cliente antes del montaje), usamos el fallback
+        // /l para no romper la hidratación y permitir que funcione sin JS.
+        const href = paths[l] || `/${l}`;
+        return (
+          <Link
+            key={l}
+            href={href}
+            className={current === l ? "active" : undefined}
+            lang={l}
+          >
+            {l.toUpperCase()}
+          </Link>
+        );
+      })}
     </nav>
   );
 }

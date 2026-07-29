@@ -197,12 +197,21 @@ export default async function DiseasePage({ params }: Props) {
     ...(genes.length > 0 || subtypeGenes.length > 0
       ? [{ id: "genes", label: td("genes"), count: genes.length || subtypeGenes.length }]
       : []),
-    ...(trials.length > 0 || organizations.length > 0
+    ...(trials.length > 0
+      ? [
+          {
+            id: "ensayos",
+            label: td("clinicalTrials"),
+            count: recruiting.length,
+          },
+        ]
+      : []),
+    ...(organizations.length > 0
       ? [
           {
             id: "donde-acudir",
             label: td("whereToGo"),
-            count: trials.length > 0 ? recruiting.length : organizations.length,
+            count: organizations.length,
           },
         ]
       : []),
@@ -445,6 +454,8 @@ export default async function DiseasePage({ params }: Props) {
                 zoomOut: td("mapZoomOut"),
                 reset: td("mapReset"),
                 hint: td("mapHint"),
+                activateMap: td("activateMap"),
+                deactivateMap: td("deactivateMap"),
               }}
             />
           )}
@@ -548,7 +559,7 @@ export default async function DiseasePage({ params }: Props) {
                 const candidate = g.associationType?.toLowerCase().includes("candidate");
                 return (
                   <tr key={g.symbol} className={causing ? "gene-causing" : undefined}>
-                    <td>
+                    <td data-label={td("geneSymbol")}>
                       <span className="gene-symbol">{g.symbol}</span>
                       {g.name && (
                         <div className="gene-name" lang="en">
@@ -556,7 +567,7 @@ export default async function DiseasePage({ params }: Props) {
                         </div>
                       )}
                     </td>
-                    <td>
+                    <td data-label={td("geneRole")}>
                       <span className={`badge ${causing ? "" : "neutral"}`}>
                         {causing
                           ? td("geneCausing")
@@ -565,7 +576,7 @@ export default async function DiseasePage({ params }: Props) {
                             : td("geneModifier")}
                       </span>
                     </td>
-                    <td>
+                    <td data-label={td("geneLinks")}>
                       <div className="gene-links">
                         {g.hgncId && <a href={HGNC_URL(g.hgncId)} rel="noreferrer" target="_blank">HGNC</a>}
                         {g.ensemblId && <a href={ENSEMBL_URL(g.ensemblId)} rel="noreferrer" target="_blank">Ensembl</a>}
@@ -626,78 +637,73 @@ export default async function DiseasePage({ params }: Props) {
         </section>
       )}
 
-      {(trials.length > 0 || organizations.length > 0) && (
+      {trials.length > 0 && (
+        <section className="block" id="ensayos">
+          <h2>{td("clinicalTrials")}</h2>
+          {/*
+            Este encuadre no es un adorno legal: sin él, una lista de ensayos se lee
+            como «aquí me curan». Un ensayo es investigación, tiene criterios de
+            entrada y no es asistencia.
+          */}
+          <p className="section-intro">{td("whereToGoIntro")}</p>
+          <div className="notice inline">{td("trialsWarning")}</div>
+
+          <TrialList
+            trials={trialVMs}
+            filterGroups={trialFilterGroups}
+            labels={{ geoLabel: tSearch("geoLabel"), geoAll: tSearch("geoAll") }}
+          />
+          <p className="hint">{td("trialsAttribution")}</p>
+        </section>
+      )}
+
+      {organizations.length > 0 && (
         <section className="block" id="donde-acudir">
           <h2>{td("whereToGo")}</h2>
-
-          {trials.length > 0 && (
-            <>
-              {/*
-                Este encuadre no es un adorno legal: sin él, una lista de ensayos se lee
-                como «aquí me curan». Un ensayo es investigación, tiene criterios de
-                entrada y no es asistencia.
-              */}
-              <p className="section-intro">{td("whereToGoIntro")}</p>
-              <div className="notice inline">{td("trialsWarning")}</div>
-
-              <TrialList
-                trials={trialVMs}
-                filterGroups={trialFilterGroups}
-                labels={{ geoLabel: tSearch("geoLabel"), geoAll: tSearch("geoAll") }}
-              />
-              <p className="hint">{td("trialsAttribution")}</p>
-            </>
-          )}
-
           {/*
             Asociaciones de pacientes (GARD, dominio público). Apoyo e información, NO
             atención médica (ADR 0006, regla 17). El buscador de especialistas o el
             registro que enlaza son de la propia organización, no una indicación nuestra.
           */}
-          {organizations.length > 0 && (
-            <>
-              <h3 className="subsection-title">{td("organizations")}</h3>
-              <p className="section-intro">{td("organizationsIntro")}</p>
-              <ul className="org-list">
-                {organizations.map((o) => (
-                  <li key={o.name} className="org">
-                    <div className="org-head">
-                      {o.website ? (
-                        <a
-                          className="org-name"
-                          href={o.website}
-                          rel="noreferrer nofollow"
-                          target="_blank"
-                        >
-                          {o.name}
-                        </a>
-                      ) : (
-                        <span className="org-name">{o.name}</span>
-                      )}
-                      {o.country && (
-                        <span className="dim small">{localizeArea(o.country, locale)}</span>
-                      )}
-                    </div>
-                    {(o.expertDirectoryUrl || o.patientRegistryUrl) && (
-                      <div className="org-links">
-                        {o.expertDirectoryUrl && (
-                          <a href={o.expertDirectoryUrl} rel="noreferrer nofollow" target="_blank">
-                            {td("orgSpecialists")}
-                          </a>
-                        )}
-                        {o.patientRegistryUrl && (
-                          <a href={o.patientRegistryUrl} rel="noreferrer nofollow" target="_blank">
-                            {td("orgRegistry")}
-                          </a>
-                        )}
-                      </div>
+          <p className="section-intro">{td("organizationsIntro")}</p>
+          <ul className="org-list">
+            {organizations.map((o) => (
+              <li key={o.name} className="org">
+                <div className="org-head">
+                  {o.website ? (
+                    <a
+                      className="org-name"
+                      href={o.website}
+                      rel="noreferrer nofollow"
+                      target="_blank"
+                    >
+                      {o.name}
+                    </a>
+                  ) : (
+                    <span className="org-name">{o.name}</span>
+                  )}
+                  {o.country && (
+                    <span className="dim small">{localizeArea(o.country, locale)}</span>
+                  )}
+                </div>
+                {(o.expertDirectoryUrl || o.patientRegistryUrl) && (
+                  <div className="org-links">
+                    {o.expertDirectoryUrl && (
+                      <a href={o.expertDirectoryUrl} rel="noreferrer nofollow" target="_blank">
+                        {td("orgSpecialists")}
+                      </a>
                     )}
-                  </li>
-                ))}
-              </ul>
-              <p className="hint">{td("organizationsAttribution")}</p>
-            </>
-          )}
+                    {o.patientRegistryUrl && (
+                      <a href={o.patientRegistryUrl} rel="noreferrer nofollow" target="_blank">
+                        {td("orgRegistry")}
+                      </a>
+                    )}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+          <p className="hint">{td("organizationsAttribution")}</p>
         </section>
       )}
 
@@ -722,7 +728,7 @@ export default async function DiseasePage({ params }: Props) {
             <tbody>
               {drugs.map((d, i) => (
                 <tr key={`${d.agency}-${i}`}>
-                  <td>
+                  <td data-label={td("drugName")}>
                     {d.url ? (
                       <a href={d.url} rel="noreferrer" target="_blank" lang="en">
                         {d.medicineName || d.activeSubstance || "—"}
@@ -736,10 +742,12 @@ export default async function DiseasePage({ params }: Props) {
                       </div>
                     )}
                   </td>
-                  <td>
+                  <td data-label={td("drugAgency")}>
                     <span className="badge neutral">{d.agency}</span>
                   </td>
-                  <td className="dim small">{d.designationDate}</td>
+                  <td data-label={td("drugDate")} className="dim small">
+                    {d.designationDate}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -796,16 +804,16 @@ export default async function DiseasePage({ params }: Props) {
           <table className="xref-table">
             <thead>
               <tr>
-                <th>Vocabulario</th>
-                <th>Identificador</th>
-                <th>Relación</th>
+                <th>{td("xrefVocab")}</th>
+                <th>{td("xrefId")}</th>
+                <th>{td("xrefRel")}</th>
               </tr>
             </thead>
             <tbody>
               {detail.xrefs.map((x) => (
                 <tr key={`${x.source_ns}:${x.source_id}`}>
-                  <td>{x.source_ns}</td>
-                  <td>
+                  <td data-label={td("xrefVocab")}>{x.source_ns}</td>
+                  <td data-label={td("xrefId")}>
                     {x.source_ns === "OMIM" ? (
                       <a href={OMIM_URL(x.source_id)} rel="noreferrer nofollow" target="_blank">
                         {x.source_id}
@@ -814,7 +822,7 @@ export default async function DiseasePage({ params }: Props) {
                       x.source_id
                     )}
                   </td>
-                  <td className="xref-rel">
+                  <td data-label={td("xrefRel")} className="xref-rel">
                     {t(`relation.${x.relation}` as never)}
                     {x.validated && ` · ${t("validated")}`}
                   </td>

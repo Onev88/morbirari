@@ -45,6 +45,8 @@ type Props = {
     zoomOut: string;
     reset: string;
     hint: string;
+    activateMap: string;
+    deactivateMap: string;
   };
 };
 
@@ -158,6 +160,8 @@ export function PrevalenceMap({ groups, lang, labels }: Props) {
           zoomOut: labels.zoomOut,
           reset: labels.reset,
           hint: labels.hint,
+          activateMap: labels.activateMap,
+          deactivateMap: labels.deactivateMap,
         }}
       >
         <svg
