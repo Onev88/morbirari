@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { routing } from "@/i18n/routing";
 
 /**
@@ -12,6 +13,7 @@ import { routing } from "@/i18n/routing";
  * idiomas dinámicamente configurados en 'routing.locales'.
  */
 export function LangSwitch({ current, label }: { current: string; label: string }) {
+  const t = useTranslations("nav");
   const [paths, setPaths] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -54,7 +56,7 @@ export function LangSwitch({ current, label }: { current: string; label: string 
             className={current === l ? "active" : undefined}
             lang={l}
           >
-            {l.toUpperCase()}
+            {t(`lang.${l}`)}
           </Link>
         );
       })}

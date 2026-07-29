@@ -39,6 +39,7 @@ type Props = {
   lang: string;
   labels: {
     noData: string;
+    mapCountries: string;
     legendLow: string;
     legendHigh: string;
     zoomIn: string;
@@ -153,7 +154,7 @@ export function PrevalenceMap({ groups, lang, labels }: Props) {
       */}
       <LeafletMap
         data={countryData}
-        ariaLabel={`${group.type}: ${byNumeric.size} países`}
+        ariaLabel={`${group.type}: ${labels.mapCountries}`}
         labels={{
           noData: labels.noData,
           zoomIn: labels.zoomIn,
@@ -168,7 +169,7 @@ export function PrevalenceMap({ groups, lang, labels }: Props) {
           viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
           className="prevalence-map"
           role="img"
-          aria-label={`${group.type}: ${byNumeric.size} países`}
+          aria-label={`${group.type}: ${labels.mapCountries}`}
           preserveAspectRatio="xMidYMid meet"
         >
           <g id="prevalence-map-layer">

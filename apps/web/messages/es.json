@@ -12,6 +12,7 @@
     "noResults": "No hemos encontrado nada. Revisa la ortografía o prueba con el nombre en inglés.",
     "degraded": "La búsqueda funciona en modo degradado: los resultados pueden ser menos precisos.",
     "empty": "Escribe algo para empezar a buscar.",
+    "orphaLabel": "ORPHA {code}",
     "geoLabel": "Filtrar por lugar",
     "geoAll": "En cualquier lugar",
     "filtersLabel": "Filtros",
@@ -70,6 +71,7 @@
     "geographyUnit": "por 100.000",
     "legendLow": "menos",
     "legendHigh": "más",
+    "mapCountries": "{count} países",
     "mapZoomIn": "Acercar",
     "mapZoomOut": "Alejar",
     "mapReset": "Restablecer vista",
@@ -161,7 +163,17 @@
       "identifiers": "Identificadores de genes y proteínas (HGNC, Ensembl, UniProt, OMIM)",
       "gard": "Asociaciones de pacientes"
     },
-    "retrievedLabel": "Datos recuperados"
+    "retrievedLabel": "Datos recuperados",
+    "orphanetAttribution": "Orphanet: base de datos en línea de enfermedades raras y medicamentos huérfanos. © INSERM 1999. Disponible en <url>http://www.orpha.net</url>. CC BY 4.0.",
+    "srcName": {
+      "orphanet": "Orphanet",
+      "hpo": "Human Phenotype Ontology",
+      "clinicaltrials": "ClinicalTrials.gov",
+      "gard": "GARD",
+      "nando": "NANDO · NanbyoData",
+      "identifiers": "HGNC · Ensembl · UniProt · OMIM",
+      "regulators": "EMA · FDA"
+    }
   },
   "disclaimer": {
     "short": "Información de referencia. No es consejo médico ni sirve para diagnosticar.",
@@ -179,7 +191,12 @@
   "nav": {
     "language": "Idioma",
     "home": "Inicio",
-    "skipToContent": "Saltar al contenido"
+    "skipToContent": "Saltar al contenido",
+    "sections": "Secciones",
+    "lang": {
+      "es": "ES",
+      "en": "EN"
+    }
   },
   "theme": {
     "label": "Tema",

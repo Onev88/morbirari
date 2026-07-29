@@ -13,6 +13,7 @@ export default async function SearchPage({ params, searchParams }: Props) {
   const { q } = await searchParams;
   const t = await getTranslations("search");
   const tDisc = await getTranslations("disclaimer");
+  const tDisease = await getTranslations("disease");
 
   const query = (q ?? "").trim();
   const { hits, degraded } = query
@@ -55,7 +56,7 @@ export default async function SearchPage({ params, searchParams }: Props) {
                   <a href={`/${locale}/d/${hit.slug}`}>
                     <div className="result-title">{hit.preferred_label}</div>
                     <div className="result-meta">
-                      ORPHA {hit.orpha_code}
+                      {tDisease("orphaCode")} {hit.orpha_code}
                       {hit.synonyms?.length > 0 && ` · ${hit.synonyms.slice(0, 3).join(" · ")}`}
                     </div>
                     {hit.definition && (

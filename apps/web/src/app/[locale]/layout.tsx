@@ -49,6 +49,7 @@ export default async function LocaleLayout({
   const tSite = await getTranslations({ locale, namespace: "site" });
   const tNav = await getTranslations({ locale, namespace: "nav" });
   const tTheme = await getTranslations({ locale, namespace: "theme" });
+  const tProv = await getTranslations({ locale, namespace: "provenance" });
 
   return (
     // El script en línea de abajo fija `data-theme` en <html> antes de la hidratación,
@@ -127,12 +128,9 @@ export default async function LocaleLayout({
                 </ul>
               </details>
               <p className="footer-attribution">
-                Orphanet: an online rare disease and orphan drug data base. © INSERM
-                1999. Available on{" "}
-                <a href="http://www.orpha.net" rel="noreferrer">
-                  http://www.orpha.net
-                </a>
-                . CC BY 4.0.
+                {tProv.rich("orphanetAttribution", {
+                  url: (chunks) => <a href="http://www.orpha.net" rel="noreferrer">{chunks}</a>,
+                })}
               </p>
             </div>
           </footer>

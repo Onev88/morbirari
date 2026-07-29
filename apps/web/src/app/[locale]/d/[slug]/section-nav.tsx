@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 
 type Section = { id: string; label: string; count?: number };
 
@@ -22,6 +23,7 @@ type Section = { id: string; label: string; count?: number };
  * es compartible.
  */
 export function SectionNav({ sections }: { sections: Section[] }) {
+  const t = useTranslations("nav");
   const [active, setActive] = useState<string>(sections[0]?.id ?? "");
   // Hasta que el JS arranca no se oculta nada: si falla, la página queda completa en
   // vez de quedar en blanco.
@@ -64,7 +66,7 @@ export function SectionNav({ sections }: { sections: Section[] }) {
   }
 
   return (
-    <nav className="section-nav" aria-label="Secciones">
+    <nav className="section-nav" aria-label={t("sections")}>
       <ul role="tablist">
         {sections.map((s) => (
           <li key={s.id}>

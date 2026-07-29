@@ -17,7 +17,7 @@ RAW_DIR = DATA_DIR / "raw"
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql+psycopg://morbirari:morbirari_dev@localhost:5432/morbirari",
+    "postgresql+psycopg://morbirari:morbirari_dev@localhost:5436/morbirari",
 )
 
 MEILI_URL = os.getenv("MEILI_URL", "http://localhost:7700")

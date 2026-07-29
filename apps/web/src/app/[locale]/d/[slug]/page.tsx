@@ -448,6 +448,7 @@ export default async function DiseasePage({ params }: Props) {
               lang={locale}
               labels={{
                 noData: td("noData"),
+                mapCountries: td("mapCountries", { count: countryCount }),
                 legendLow: td("legendLow"),
                 legendHigh: td("legendHigh"),
                 zoomIn: td("mapZoomIn"),
@@ -849,14 +850,14 @@ export default async function DiseasePage({ params }: Props) {
               rel="noreferrer"
               target="_blank"
             >
-              Orphanet
+              {tProv("srcName.orphanet")}
             </a>
             <span className="source-desc">{tProv("src.orphanet")}</span>
           </li>
           {phenotypes.length > 0 && (
             <li className="source">
               <a href="https://hpo.jax.org" rel="noreferrer" target="_blank">
-                Human Phenotype Ontology
+                {tProv("srcName.hpo")}
               </a>
               <span className="source-desc">{tProv("src.hpo")}</span>
             </li>
@@ -864,21 +865,21 @@ export default async function DiseasePage({ params }: Props) {
           {trials.length > 0 && (
             <li className="source">
               <a href="https://clinicaltrials.gov" rel="noreferrer nofollow" target="_blank">
-                ClinicalTrials.gov
+                {tProv("srcName.clinicaltrials")}
               </a>
               <span className="source-desc">{tProv("src.clinicalTrials")}</span>
             </li>
           )}
           {drugs.length > 0 && (
             <li className="source">
-              <span className="source-name">EMA · FDA</span>
+              <span className="source-name">{tProv("srcName.regulators")}</span>
               <span className="source-desc">{tProv("src.regulators")}</span>
             </li>
           )}
           {organizations.length > 0 && (
             <li className="source">
               <a href="https://rarediseases.info.nih.gov" rel="noreferrer nofollow" target="_blank">
-                GARD
+                {tProv("srcName.gard")}
               </a>
               <span className="source-desc">{tProv("src.gard")}</span>
             </li>
@@ -886,7 +887,7 @@ export default async function DiseasePage({ params }: Props) {
           {(jpDesignation || otherLangs.some((o) => o.lang === "ja")) && (
             <li className="source">
               <a href="https://nanbyodata.jp" rel="noreferrer" target="_blank">
-                NANDO · NanbyoData
+                {tProv("srcName.nando")}
               </a>
               <span className="source-desc">{tProv("src.nando")}</span>
             </li>
@@ -894,7 +895,7 @@ export default async function DiseasePage({ params }: Props) {
           {(genes.length > 0 || subtypeGenes.length > 0 || detail.xrefs.length > 0) && (
             <li className="source">
               <a href="https://www.genenames.org" rel="noreferrer" target="_blank">
-                HGNC · Ensembl · UniProt · OMIM
+                {tProv("srcName.identifiers")}
               </a>
               <span className="source-desc">{tProv("src.identifiers")}</span>
             </li>
