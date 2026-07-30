@@ -1,65 +1,81 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useEffect, useState, useRef } from "react";
+import { Link, usePathname, routing } from "@/i18n/routing";
 import { useTranslations } from "next-intl";
-import { routing } from "@/i18n/routing";
 
 /**
- * Conmutador de idioma que conserva la página actual, la búsqueda y la pestaña activa.
+ * Conmutador de idioma en cascada (dropdown) que conserva la página actual, la búsqueda (?q=...)
+ * y el hash (#...) de sección activa.
  *
- * Resolviendo la ruta completa (incluyendo query y hash) únicamente en el cliente tras el montaje,
- * evitamos desajustes de hidratación (hydration mismatch) y mantenemos soporte para múltiples
- * idiomas dinámicamente configurados en 'routing.locales'.
+ * Utiliza 'usePathname' de next-intl para resolver la página limpia en el servidor (evitando
+ * hydration mismatch), y concatena la query y el hash del cliente asíncronamente tras el montaje.
  */
 export function LangSwitch({ current, label }: { current: string; label: string }) {
   const t = useTranslations("nav");
-  const [paths, setPaths] = useState<Record<string, string>>({});
+  const pathname = usePathname();
+  const [isOpen, setIsOpen] = useState(false);
+  const [urlSuffix, setUrlSuffix] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
 
+  // Captura del sufijo del cliente (search params + hash) y cierre al hacer clic fuera
   useEffect(() => {
-    const pathname = window.location.pathname;
     const search = window.location.search || "";
     const hash = window.location.hash || "";
+    setUrlSuffix(`${search}${hash}`);
 
-    const getLocalizedPath = (targetLocale: string) => {
-      if (!pathname) return `/${targetLocale}${search}${hash}`;
-
-      const segments = pathname.split("/");
-      // segments[1] es el prefijo de idioma (es / en / etc.)
-      const knownLocales = routing.locales;
-      if (segments[1] && knownLocales.includes(segments[1] as any)) {
-        segments[1] = targetLocale;
-        return `${segments.join("/")}${search}${hash}`;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
       }
-
-      const cleanPath = pathname === "/" ? "" : pathname;
-      return `/${targetLocale}${cleanPath}${search}${hash}`;
     };
-
-    const newPaths: Record<string, string> = {};
-    routing.locales.forEach((l) => {
-      newPaths[l] = getLocalizedPath(l);
-    });
-    setPaths(newPaths);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   return (
-    <nav className="lang-switch" aria-label={label}>
-      {routing.locales.map((l) => {
-        // En el primer render (SSR y cliente antes del montaje), usamos el fallback
-        // /l para no romper la hidratación y permitir que funcione sin JS.
-        const href = paths[l] || `/${l}`;
-        return (
-          <Link
-            key={l}
-            href={href}
-            className={current === l ? "active" : undefined}
-            lang={l}
-          >
-            {t(`lang.${l}`)}
-          </Link>
-        );
-      })}
-    </nav>
+    <div
+      className="lang-switch-container"
+      ref={containerRef}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") setIsOpen(false);
+      }}
+    >
+      <button
+        type="button"
+        className="lang-switch-trigger"
+        aria-haspopup="true"
+        aria-expanded={isOpen}
+        aria-label={label}
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <span className="lang-icon" aria-hidden="true">🌐</span>
+        <span className="lang-current-label">{current.toUpperCase()}</span>
+        <span className="lang-arrow" aria-hidden="true">▾</span>
+      </button>
+
+      <ul className={`lang-switch-menu ${isOpen ? "open" : ""}`} role="menu">
+        {routing.locales.map((l) => {
+          // El href se compone del pathname (sin locale) + la búsqueda/hash.
+          // El componente Link de next-intl le inyecta el locale correspondiente automáticamente.
+          const href = `${pathname}${urlSuffix}`;
+          return (
+            <li key={l} role="none">
+              <Link
+                href={href}
+                locale={l}
+                className={current === l ? "active" : undefined}
+                lang={l}
+                role="menuitem"
+                onClick={() => setIsOpen(false)}
+              >
+                <span className="lang-code">{l.toUpperCase()}</span>
+                <span className="lang-full-name">{t(`lang.${l}`)}</span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }

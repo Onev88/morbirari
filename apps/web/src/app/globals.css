@@ -407,29 +407,119 @@ section.block[id] {
   flex: 1;
 }
 
-.lang-switch {
-  display: flex;
-  gap: 4px;
-  font-size: 0.95rem;
-  align-items: center;
+/* Contenedor del selector de idiomas (ocupa muy poco espacio, tipo botón pill/dropdown) */
+.lang-switch-container {
+  position: relative;
+  display: inline-block;
 }
 
-.lang-switch a {
-  text-decoration: none;
-  min-width: 48px;
-  height: 48px;
+.lang-switch-trigger {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  height: 48px;
+  padding: 0 16px;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.lang-switch-trigger:hover,
+.lang-switch-container:hover .lang-switch-trigger {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.lang-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.lang-arrow {
+  font-size: 0.75rem;
+  opacity: 0.7;
+  transition: transform 0.2s;
+}
+
+.lang-switch-container:hover .lang-arrow {
+  transform: translateY(1px);
+}
+
+.lang-switch-menu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  padding: 6px;
+  min-width: 150px;
+  z-index: 100;
+  list-style: none;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Mostrar menú con hover (desktop) o focos */
+.lang-switch-container:hover .lang-switch-menu,
+.lang-switch-container:focus-within .lang-switch-menu,
+.lang-switch-menu.open {
+  display: flex;
+}
+
+.lang-switch-menu li {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lang-switch-menu a {
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
   border-radius: var(--radius);
   color: var(--muted);
+  font-size: 0.85rem;
   transition: background-color 0.2s, color 0.2s;
 }
 
-.lang-switch a.active {
+.lang-switch-menu a:hover {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.lang-switch-menu a.active {
   background: var(--accent-soft);
   color: var(--accent);
   font-weight: 600;
+}
+
+.lang-switch-menu .lang-code {
+  font-weight: 700;
+  font-size: 0.7rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 4px;
+  text-align: center;
+  min-width: 24px;
+}
+
+.lang-switch-menu a.active .lang-code {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 @media (max-width: 640px) {
