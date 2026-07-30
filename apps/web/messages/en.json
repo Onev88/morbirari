@@ -195,7 +195,10 @@
     "sections": "Sections",
     "lang": {
       "es": "ES",
-      "en": "EN"
+      "en": "EN",
+      "fr": "FR",
+      "it": "IT",
+      "pt": "PT"
     }
   },
   "theme": {

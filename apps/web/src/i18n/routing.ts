@@ -10,7 +10,7 @@ import { createNavigation } from "next-intl/navigation";
  * banner de consentimiento.
  */
 export const routing = defineRouting({
-  locales: ["en", "es"],
+  locales: ["en", "es", "fr", "it", "pt"],
   defaultLocale: "es",
 });
 

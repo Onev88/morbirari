@@ -25,7 +25,7 @@ MEILI_MASTER_KEY = os.getenv("MEILI_MASTER_KEY", "morbirari_dev_master_key")
 
 # Idiomas activos. Fase 1: EN + ES. Orphanet publica 9.
 # Añadir un idioma aquí debe ser lo único necesario para soportarlo.
-ACTIVE_LANGS = tuple(os.getenv("MORBIRARI_LANGS", "en,es").split(","))
+ACTIVE_LANGS = tuple(os.getenv("MORBIRARI_LANGS", "en,es,fr,it,pt").split(","))
 
 ORPHANET_LANGS = ("cs", "nl", "en", "fr", "de", "it", "pl", "pt", "es")
 
