@@ -7,29 +7,21 @@ fondo van en [docs/adr/](docs/adr/); esto es la lista de lo que falta por hacer.
 
 ### Programar el `--resume` periódico de ensayos clínicos
 
-**Estado:** la caducidad ya está **implementada**; falta **programar** la ejecución periódica.
+**Estado:** ✅ **hecho**. Caducidad implementada ([commit «Registrar la consulta de
+ensayos, no solo el resultado»](https://github.com/Onev88/morbirari/commit/) e ingreso
+en la ingesta de ensayos) y ejecución periódica programada en
+[etl-trials-scheduled.yml](.github/workflows/etl-trials-scheduled.yml): los lunes,
+`mr ingest trials --resume` vuelve a consultar solo lo que caducó
+(`--refresh-after=30` días por defecto). No hace falta `index rebuild`: los ensayos no
+viven en el índice de búsqueda, la ficha y la home los leen de Postgres.
 
-Los ensayos clínicos (ClinicalTrials.gov) son **datos volátiles**: un ensayo abre,
-cambia de estado de reclutamiento y cierra. La [ADR 0001](docs/adr/0001-own-index-not-federation.md)
-ya avisa de que necesitan una cadencia de refresco propia.
-
-**Ya hecho** (commit «Registrar la consulta de ensayos, no solo el resultado»): la tabla
-`trial_query` anota **cuándo** se consultó cada enfermedad —con resultado o sin él, porque
-«no hay ensayos abiertos» también es una respuesta que hay que recordar—, y solo un error de
-la fuente queda sin anotar para reintentarse. `mr ingest trials` gana `--refresh-after=30`
-(días): en un `--resume`, vuelve a consultar lo caducado en vez de saltarlo por existir. El
-filtro vive en `mesh_ids_by_disease(..., fresh_for_days=...)`
-([`loaders/science.py`](etl/src/morbirari_etl/loaders/science.py)); la migración de estreno
-rellena las enfermedades ya cargadas fechándolas por la procedencia de sus vínculos.
-
-**Lo que falta:** disparar ese `--resume` de forma **periódica**. Hoy
-[etl-scheduled.yml](.github/workflows/etl-scheduled.yml) solo reingiere Orphanet una vez al
-mes; hay que ampliarlo con un `mr ingest trials --resume` en una cadencia propia (más frecuente
-que la anual de Orphanet), para que el refresco de «dónde acudir» y «si están reclutando»
-ocurra sin intervención manual.
-
-**Origen:** decisión de la sesión «Morbi Rari rare disease system» (2026-07-16); caducidad
-implementada e integrada el 2026-07-18.
+Historia: los ensayos clínicos (ClinicalTrials.gov) son **datos volátiles**: un ensayo
+abre, cambia de estado de reclutamiento y cierra. La
+[ADR 0001](docs/adr/0001-own-index-not-federation.md) ya avisa de que necesitan una
+cadencia de refresco propia. La caducidad en sí -la tabla `trial_query`, `--refresh-after`,
+el filtro `mesh_ids_by_disease(..., fresh_for_days=...)`- ya estaba implementada
+([`loaders/science.py`](etl/src/morbirari_etl/loaders/science.py)); faltaba dispararla en
+un calendario. Sesión de 2026-07-16 a 2026-07-18; programado el 2026-08-31.
 
 ## Fuentes bajo acuerdo
 

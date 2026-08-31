@@ -1,0 +1,32 @@
+name: ETL programado — ensayos clínicos
+
+# Los ensayos (ClinicalTrials.gov) son datos volátiles: abren, cambian de estado de
+# reclutamiento y cierran. Necesitan una cadencia propia, más frecuente que la
+# mensual de Orphanet. `--resume` solo vuelve a consultar lo que caducó
+# (`--refresh-after`, 30 días por defecto): una semana no es un bombardeo al API.
+on:
+  schedule:
+    - cron: "0 4 * * 1" # lunes 04:00 UTC
+  workflow_dispatch:
+
+jobs:
+  trials:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: etl
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - run: alembic upgrade head
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - run: python -m morbirari_etl ingest trials --resume
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      # Los ensayos no entran en el índice de búsqueda (solo labels), así que no hace
+      # falta `index rebuild`; la ficha y la home los leen de Postgres directamente.
