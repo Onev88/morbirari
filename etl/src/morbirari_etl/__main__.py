@@ -8,6 +8,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 from sqlalchemy import func, select
+from sqlalchemy.orm import sessionmaker
 
 from morbirari_etl.config import ACTIVE_LANGS, VALIDATION_FAILURE_THRESHOLD
 from morbirari_etl.db import (
@@ -33,6 +34,88 @@ app.add_typer(index_app, name="index")
 console = Console()
 
 
+class IngestRunContext:
+    """Envuelve el ciclo {upsert_source → start_run → make_provenance → trabajo → finish_run}.
+
+    A la salida limpia: `finish_run(success, counts)` y commit, solo si el cuerpo llamó
+    a `success()`. Si el cuerpo lanza: rollback, marca el run como `failed` en una sesión
+    aparte —con el motivo, para que `mr status` cuente la verdad— y aborta el comando
+    con `typer.Exit(1)`.
+
+    Antes de esto el ciclo se repetía a mano en ~9 comandos y un fallo en science, drugs,
+    nando o classifications dejaba el run colgado en `running` para siempre. Ahora el
+    aseo vive en un solo sitio. El skip por checksum queda fuera, en `should_skip()`:
+    hay comandos que lo aplican por producto y comandos que no.
+    """
+
+    def __init__(
+        self,
+        session,
+        session_factory: sessionmaker,
+        *,
+        source_name: str,
+        license_spdx: str | None,
+        attribution: str,
+        homepage: str,
+        redistributable: bool,
+        sha: str,
+        version: str | None,
+        url: str | None,
+        fail_label: str,
+    ):
+        self.session = session
+        self._session_factory = session_factory
+        self._fail_label = fail_label
+        self._counts: dict | None = None
+        self._source = dict(
+            name=source_name,
+            license_spdx=license_spdx,
+            attribution_text=attribution,
+            homepage=homepage,
+            redistributable=redistributable,
+        )
+        self.sha = sha
+        self.version = version
+        self.url = url
+        self.run: IngestRun
+        self.prov: Provenance
+
+    def __enter__(self) -> IngestRunContext:
+        src = pg.upsert_source(self.session, **self._source)
+        self.run = pg.start_run(self.session, src, self.sha, self.version)
+        self.prov = pg.make_provenance(self.session, src, self.run, self.version, self.url)
+        return self
+
+    def success(self, counts: dict) -> None:
+        """Registra los recuentos para cerrar el run como `success` a la salida limpia."""
+        self._counts = counts
+
+    def __exit__(self, exc_type, exc, traceback) -> bool:
+        if exc_type is None:
+            if self._counts is not None:
+                pg.finish_run(self.session, self.run, "success", self._counts)
+                self.session.commit()
+            return False
+
+        self.session.rollback()
+        # En una sesión aparte: la actual está revuelta por el fallo.
+        with self._session_factory() as err_session:
+            failed_run = err_session.get(IngestRun, self.run.id)
+            if failed_run:
+                pg.finish_run(err_session, failed_run, "failed", None, str(exc))
+                err_session.commit()
+        console.print(f"  [red]{self._fail_label}: FALLO[/red] {exc}")
+        raise typer.Exit(1) from exc
+
+
+def should_skip(session, source_name: str, sha: str, force: bool) -> bool:
+    """¿Ya se ingirió con éxito este checksum? Si no y no `--force`, se salta."""
+    if pg.has_successful_run_for_sha(session, source_name, sha) and not force:
+        console.print(f"  [dim]sin cambios (sha {sha[:12]}), se salta[/dim]")
+        return True
+    return False
+
+
 @ingest_app.command("orphanet")
 def ingest_orphanet(
     lang: str = typer.Option(",".join(ACTIVE_LANGS), help="Idiomas separados por comas"),
@@ -47,13 +130,7 @@ def ingest_orphanet(
 
     for lang_code, artifact in zip(langs, artifacts):
         with Session() as session:
-            already = pg.has_successful_run_for_sha(
-                session, orphanet.SOURCE_NAME, artifact.sha256
-            )
-            if already and not force:
-                console.print(
-                    f"  [dim]{lang_code}: sin cambios (sha {artifact.sha256[:12]}), se salta[/dim]"
-                )
+            if should_skip(session, orphanet.SOURCE_NAME, artifact.sha256, force):
                 continue
 
             nomenclature_xml = orphanet._extract_member(
@@ -63,21 +140,19 @@ def ingest_orphanet(
 
             # La licencia se lee de lo que el propio fichero declara, no de lo que
             # creímos recordar.
-            source = pg.upsert_source(
+            with IngestRunContext(
                 session,
-                name=orphanet.SOURCE_NAME,
+                Session,
+                source_name=orphanet.SOURCE_NAME,
                 license_spdx=meta.license_spdx,
-                attribution_text=orphanet.ATTRIBUTION,
+                attribution=orphanet.ATTRIBUTION,
                 homepage="https://www.orpha.net",
                 redistributable=(meta.license_spdx or "").upper().startswith("CC-BY"),
-            )
-            run = pg.start_run(session, source, artifact.sha256, meta.extraction_date)
-            prov = pg.make_provenance(
-                session, source, run, meta.extraction_date, artifact.source_url
-            )
-            run_started = datetime.now(timezone.utc)
-
-            try:
+                sha=artifact.sha256,
+                version=meta.extraction_date,
+                url=artifact.source_url,
+                fail_label=lang_code,
+            ) as ctx:
                 parsed, failed = [], 0
                 for item in orphanet.parse(artifact, lang_code):
                     parsed.append(item)
@@ -90,26 +165,16 @@ def ingest_orphanet(
                         f"los datos vivos siguen sirviendo."
                     )
 
-                counts = pg.load_diseases(session, parsed, lang_code, prov, run_started)
-                retired = pg.retire_missing(session, orphanet.SOURCE_NAME, run_started)
-                counts["retired"] = retired
-                pg.finish_run(session, run, "success", counts)
-                session.commit()
+                run_started = datetime.now(timezone.utc)
+                counts = pg.load_diseases(session, parsed, lang_code, ctx.prov, run_started)
+                counts["retired"] = pg.retire_missing(session, orphanet.SOURCE_NAME, run_started)
+                ctx.success(counts)
 
-                console.print(
-                    f"  [green]{lang_code}[/green]: {counts['diseases']} enfermedades · "
-                    f"{counts['labels']} etiquetas · {counts['xrefs']} xrefs · "
-                    f"{counts['definitions']} definiciones · {retired} retiradas"
-                )
-            except Exception as exc:  # noqa: BLE001
-                session.rollback()
-                with Session() as err_session:
-                    err_run = err_session.get(IngestRun, run.id)
-                    if err_run:
-                        pg.finish_run(err_session, err_run, "failed", None, str(exc))
-                        err_session.commit()
-                console.print(f"  [red]{lang_code}: FALLO[/red] {exc}")
-                raise typer.Exit(1) from exc
+            console.print(
+                f"  [green]{lang_code}[/green]: {counts['diseases']} enfermedades · "
+                f"{counts['labels']} etiquetas · {counts['xrefs']} xrefs · "
+                f"{counts['definitions']} definiciones · {counts['retired']} retiradas"
+            )
 
 
 @ingest_app.command("science")
@@ -146,62 +211,68 @@ def ingest_science(
             artifact = sci.fetch_product(product, lang_code, force=force)
 
             with Session() as session:
-                if (
-                    pg.has_successful_run_for_sha(session, f"orphanet-{product}", artifact.sha256)
-                    and not force
-                ):
-                    console.print(f"  [dim]sin cambios (sha {artifact.sha256[:12]}), se salta[/dim]")
+                if should_skip(session, f"orphanet-{product}", artifact.sha256, force):
                     continue
 
                 extraction_date, license_spdx = sci.read_meta(artifact.path)
-                source = pg.upsert_source(
+                with IngestRunContext(
                     session,
-                    name=f"orphanet-{product}",
+                    Session,
+                    source_name=f"orphanet-{product}",
                     license_spdx=license_spdx,
-                    attribution_text=orphanet.ATTRIBUTION,
+                    attribution=orphanet.ATTRIBUTION,
                     homepage="https://www.orphadata.com",
                     redistributable=(license_spdx or "").upper().startswith("CC-BY"),
-                )
-                run = pg.start_run(session, source, artifact.sha256, extraction_date)
-                prov = pg.make_provenance(session, source, run, extraction_date, artifact.source_url)
-
-                try:
+                    sha=artifact.sha256,
+                    version=extraction_date,
+                    url=artifact.source_url,
+                    fail_label=f"{label}·{lang_code}",
+                ) as ctx:
                     index = sci_loader.disease_ids_by_orpha(session)
-                    counts: dict[str, int] = {}
 
                     if product == "product1":
-                        counts["referencias"] = sci_loader.load_alignments(
-                            session, sci.parse_alignments(artifact.path), prov, index
-                        )
+                        counts = {
+                            "referencias": sci_loader.load_alignments(
+                                session, sci.parse_alignments(artifact.path), ctx.prov, index
+                            )
+                        }
                     elif product == "product9_prev":
-                        counts["prevalencias"] = sci_loader.load_epidemiology(
-                            session, sci.parse_epidemiology(artifact.path), lang_code, prov, index
-                        )
+                        counts = {
+                            "prevalencias": sci_loader.load_epidemiology(
+                                session,
+                                sci.parse_epidemiology(artifact.path),
+                                lang_code,
+                                ctx.prov,
+                                index,
+                            )
+                        }
                     elif product == "product9_ages":
-                        counts["atributos"] = sci_loader.load_attributes(
-                            session, sci.parse_natural_history(artifact.path), lang_code, prov, index
-                        )
+                        counts = {
+                            "atributos": sci_loader.load_attributes(
+                                session,
+                                sci.parse_natural_history(artifact.path),
+                                lang_code,
+                                ctx.prov,
+                                index,
+                            )
+                        }
                     elif product == "product4":
                         terms, assoc = sci_loader.load_phenotypes(
-                            session, sci.parse_phenotypes(artifact.path), prov, index
+                            session, sci.parse_phenotypes(artifact.path), ctx.prov, index
                         )
-                        counts["terminos_hpo"] = terms
-                        counts["anotaciones"] = assoc
+                        counts = {"terminos_hpo": terms, "anotaciones": assoc}
                     elif product == "product6":
                         genes, assoc = sci_loader.load_genes(
-                            session, sci.parse_genes(artifact.path), prov, index
+                            session, sci.parse_genes(artifact.path), ctx.prov, index
                         )
-                        counts["genes"] = genes
-                        counts["asociaciones"] = assoc
+                        counts = {"genes": genes, "asociaciones": assoc}
+                    else:
+                        raise RuntimeError(f"producto desconocido: {product}")
 
-                    pg.finish_run(session, run, "success", counts)
-                    session.commit()
-                    detalle = " · ".join(f"{v} {k}" for k, v in counts.items())
-                    console.print(f"  [green]OK[/green] {detalle}")
-                except Exception as exc:  # noqa: BLE001
-                    session.rollback()
-                    console.print(f"  [red]FALLO[/red] {exc}")
-                    raise typer.Exit(1) from exc
+                    ctx.success(counts)
+
+                detalle = " · ".join(f"{v} {k}" for k, v in counts.items())
+                console.print(f"  [green]OK[/green] {detalle}")
 
     # Los términos HPO llegan en inglés aunque el producto sea es_product4: Orphanet
     # no los traduce. Las traducciones oficiales van aparte.
@@ -214,29 +285,25 @@ def ingest_science(
             continue
 
         with Session() as session:
-            if pg.has_successful_run_for_sha(session, hpo_tr.SOURCE_NAME, artifact.sha256) and not force:
-                console.print("  [dim]sin cambios, se salta[/dim]")
+            if should_skip(session, hpo_tr.SOURCE_NAME, artifact.sha256, force):
                 continue
 
-            source = pg.upsert_source(
+            with IngestRunContext(
                 session,
-                name=hpo_tr.SOURCE_NAME,
+                Session,
+                source_name=hpo_tr.SOURCE_NAME,
                 license_spdx=None,  # HPO usa licencia propia, sin identificador SPDX
-                attribution_text=hpo_tr.ATTRIBUTION,
+                attribution=hpo_tr.ATTRIBUTION,
                 homepage="https://hpo.jax.org",
                 redistributable=True,
-            )
-            run = pg.start_run(session, source, artifact.sha256, None)
-            prov = pg.make_provenance(session, source, run, None, artifact.source_url)
-            try:
-                n = sci_loader.load_phenotype_translations(session, hpo_tr.parse(artifact), prov)
-                pg.finish_run(session, run, "success", {"traducciones": n})
-                session.commit()
-                console.print(f"  [green]OK[/green] {n} términos traducidos")
-            except Exception as exc:  # noqa: BLE001
-                session.rollback()
-                console.print(f"  [red]FALLO[/red] {exc}")
-                raise typer.Exit(1) from exc
+                sha=artifact.sha256,
+                version=None,
+                url=artifact.source_url,
+                fail_label="hpo",
+            ) as ctx:
+                n = sci_loader.load_phenotype_translations(session, hpo_tr.parse(artifact), ctx.prov)
+                ctx.success({"traducciones": n})
+            console.print(f"  [green]OK[/green] {n} términos traducidos")
 
 
 @ingest_app.command("drugs")
@@ -255,36 +322,32 @@ def ingest_drugs(force: bool = typer.Option(False, help="Reingerir aunque no hay
     artifact = ema.fetch(force=force)
 
     with Session() as session:
-        if pg.has_successful_run_for_sha(session, ema.SOURCE_NAME, artifact.sha256) and not force:
-            console.print(f"  [dim]sin cambios (sha {artifact.sha256[:12]}), se salta[/dim]")
+        if should_skip(session, ema.SOURCE_NAME, artifact.sha256, force):
             return
 
-        source = pg.upsert_source(
+        with IngestRunContext(
             session,
-            name=ema.SOURCE_NAME,
+            Session,
+            source_name=ema.SOURCE_NAME,
             license_spdx=None,
-            attribution_text=ema.ATTRIBUTION,
+            attribution=ema.ATTRIBUTION,
             homepage="https://www.ema.europa.eu",
             redistributable=True,
-        )
-        run = pg.start_run(session, source, artifact.sha256, None)
-        prov = pg.make_provenance(session, source, run, None, artifact.source_url)
-
-        try:
+            sha=artifact.sha256,
+            version=None,
+            url=artifact.source_url,
+            fail_label="EMA",
+        ) as ctx:
             n_drugs, n_links = sci_loader.load_orphan_drugs(
-                session, ema.parse(artifact), ema.AGENCY, prov
+                session, ema.parse(artifact), ema.AGENCY, ctx.prov
             )
-            pg.finish_run(session, run, "success", {"designaciones": n_drugs, "vinculos": n_links})
-            session.commit()
-            pct = (n_links / n_drugs * 100) if n_drugs else 0
-            console.print(
-                f"  [green]OK[/green] {n_drugs} designaciones · {n_links} enlazadas "
-                f"a una enfermedad ({pct:.0f}%)"
-            )
-        except Exception as exc:  # noqa: BLE001
-            session.rollback()
-            console.print(f"  [red]FALLO[/red] {exc}")
-            raise typer.Exit(1) from exc
+            ctx.success({"designaciones": n_drugs, "vinculos": n_links})
+
+    pct = (n_links / n_drugs * 100) if n_drugs else 0
+    console.print(
+        f"  [green]OK[/green] {n_drugs} designaciones · {n_links} enlazadas "
+        f"a una enfermedad ({pct:.0f}%)"
+    )
 
 
 @ingest_app.command("nando")
@@ -303,36 +366,32 @@ def ingest_nando(force: bool = typer.Option(False, help="Reingerir aunque no hay
     mapping_art, labels_art = nando.fetch(force=force)
 
     with Session() as session:
-        if pg.has_successful_run_for_sha(session, nando.SOURCE_NAME, mapping_art.sha256) and not force:
-            console.print(f"  [dim]sin cambios (sha {mapping_art.sha256[:12]}), se salta[/dim]")
+        if should_skip(session, nando.SOURCE_NAME, mapping_art.sha256, force):
             return
 
-        source = pg.upsert_source(
+        with IngestRunContext(
             session,
-            name=nando.SOURCE_NAME,
+            Session,
+            source_name=nando.SOURCE_NAME,
             license_spdx="CC-BY-4.0",
-            attribution_text=nando.ATTRIBUTION,
+            attribution=nando.ATTRIBUTION,
             homepage="https://nanbyodata.jp",
             redistributable=True,
-        )
-        run = pg.start_run(session, source, mapping_art.sha256, None)
-        prov = pg.make_provenance(session, source, run, None, mapping_art.source_url)
-
-        try:
+            sha=mapping_art.sha256,
+            version=None,
+            url=mapping_art.source_url,
+            fail_label="NANDO",
+        ) as ctx:
             index = sci_loader.disease_ids_by_orpha(session)
             n_labels, n_attrs = sci_loader.load_nando(
-                session, nando.parse(mapping_art, labels_art), prov, index
+                session, nando.parse(mapping_art, labels_art), ctx.prov, index
             )
-            pg.finish_run(session, run, "success", {"etiquetas_ja": n_labels, "designaciones": n_attrs})
-            session.commit()
-            console.print(
-                f"  [green]OK[/green] {n_labels} etiquetas en japonés · "
-                f"{n_attrs} designaciones oficiales"
-            )
-        except Exception as exc:  # noqa: BLE001
-            session.rollback()
-            console.print(f"  [red]FALLO[/red] {exc}")
-            raise typer.Exit(1) from exc
+            ctx.success({"etiquetas_ja": n_labels, "designaciones": n_attrs})
+
+    console.print(
+        f"  [green]OK[/green] {n_labels} etiquetas en japonés · "
+        f"{n_attrs} designaciones oficiales"
+    )
 
 
 @ingest_app.command("trials")
@@ -380,18 +439,23 @@ def ingest_trials(
         return
 
     with Session() as session:
-        source = pg.upsert_source(
+        with IngestRunContext(
             session,
-            name=ct.SOURCE_NAME,
+            Session,
+            source_name=ct.SOURCE_NAME,
             license_spdx=None,  # obra del gobierno de EE.UU., sin identificador SPDX
-            attribution_text=ct.ATTRIBUTION,
+            attribution=ct.ATTRIBUTION,
             homepage="https://clinicaltrials.gov",
             redistributable=True,
-        )
-        run = pg.start_run(session, source, "n/a", None)
-        prov = pg.make_provenance(session, source, run, None, ct.API)
-        session.commit()
-        run_id, prov_id = run.id, prov.id
+            sha="n/a",
+            version=None,
+            url=ct.API,
+            fail_label="trials",
+        ) as ctx:
+            # El run queda fijado; el trabajo va fuera del contexto, con sesiones por
+            # enfermedad. Un fallo catastrófico en el arranque marca el run como fallido.
+            session.commit()
+            run_id, prov_id = ctx.run.id, ctx.prov.id
 
     total_trials = 0
     with_trials = 0
@@ -478,18 +542,22 @@ def ingest_gard(
     accounts = gard.account_index(artifact)
 
     with Session() as session:
-        source = pg.upsert_source(
+        with IngestRunContext(
             session,
-            name=gard.SOURCE_NAME,
+            Session,
+            source_name=gard.SOURCE_NAME,
             license_spdx=None,  # obra del gobierno de EE.UU., sin identificador SPDX
-            attribution_text=gard.ATTRIBUTION,
+            attribution=gard.ATTRIBUTION,
             homepage="https://rarediseases.info.nih.gov",
             redistributable=True,
-        )
-        run = pg.start_run(session, source, artifact.sha256, artifact.source_version)
-        prov = pg.make_provenance(session, source, run, artifact.source_version, artifact.source_url)
-        session.commit()
-        run_id, prov_id = run.id, prov.id
+            sha=artifact.sha256,
+            version=artifact.source_version,
+            url=artifact.source_url,
+            fail_label="GARD",
+        ) as ctx:
+            # Mismo esquema que trials: el run se fija aquí y el trabajo va después.
+            session.commit()
+            run_id, prov_id = ctx.run.id, ctx.prov.id
 
     with Session() as session:
         targets = sci_loader.gard_ids_by_disease(session, skip_existing=resume and not only)
@@ -571,27 +639,24 @@ def ingest_classifications(
     for lang_code, artifact in zip(langs, artifacts):
         console.print(f"[bold]clasificaciones[/bold] · {lang_code}")
         with Session() as session:
-            source = pg.upsert_source(
+            with IngestRunContext(
                 session,
-                name="orphanet-classifications",
+                Session,
+                source_name="orphanet-classifications",
                 license_spdx="CC-BY-4.0",
-                attribution_text=orphanet.ATTRIBUTION,
+                attribution=orphanet.ATTRIBUTION,
                 homepage="https://www.orpha.net",
                 redistributable=True,
-            )
-            run = pg.start_run(session, source, artifact.sha256, None)
-            prov = pg.make_provenance(session, source, run, None, artifact.source_url)
-            try:
+                sha=artifact.sha256,
+                version=None,
+                url=artifact.source_url,
+                fail_label=lang_code,
+            ) as ctx:
                 n_class, n_edges = sci_loader.load_classifications(
-                    session, cl.parse_all(artifact.path, lang_code), prov
+                    session, cl.parse_all(artifact.path, lang_code), ctx.prov
                 )
-                pg.finish_run(session, run, "success", {"clasificaciones": n_class, "aristas": n_edges})
-                session.commit()
-                console.print(f"  [green]OK[/green] {n_class} clasificaciones · {n_edges} aristas")
-            except Exception as exc:  # noqa: BLE001
-                session.rollback()
-                console.print(f"  [red]FALLO[/red] {exc}")
-                raise typer.Exit(1) from exc
+                ctx.success({"clasificaciones": n_class, "aristas": n_edges})
+            console.print(f"  [green]OK[/green] {n_class} clasificaciones · {n_edges} aristas")
 
 
 @index_app.command("rebuild")
