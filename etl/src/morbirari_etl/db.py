@@ -25,7 +25,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
 
-from morbirari_etl.config import DATABASE_URL
+from morbirari_etl.config import DB_CONNECT_TIMEOUT, DATABASE_URL
 
 
 class Base(DeclarativeBase):
@@ -646,7 +646,13 @@ class DiseaseContent(Base):
 
 
 def get_engine(url: str | None = None):
-    return create_engine(url or DATABASE_URL, future=True)
+    # `connect_timeout` hace que un Postgres caído falle en segundos en vez de quedarse
+    # colgado: los tests de integración dependen de ello para saltar con rapidez.
+    return create_engine(
+        url or DATABASE_URL,
+        future=True,
+        connect_args={"connect_timeout": DB_CONNECT_TIMEOUT},
+    )
 
 
 def get_sessionmaker(url: str | None = None):

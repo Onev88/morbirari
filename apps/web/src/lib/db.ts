@@ -8,7 +8,10 @@ import postgres from "postgres";
  */
 const connectionString =
   process.env.DATABASE_URL ??
-  "postgres://morbirari:morbirari_dev@localhost:5432/morbirari";
+  // El puerto es el del docker-compose (5436 del host → 5432 del contenedor). Se usa
+  // 127.0.0.1 y no `localhost`: en host donde localhost resuelve a ::1 primero, un
+  // puerto cerrado por IPv6 cuelga la conexión hasta el timeout en vez de rechazarla.
+  "postgres://morbirari:morbirari_dev@127.0.0.1:5436/morbirari";
 
 declare global {
   // eslint-disable-next-line no-var

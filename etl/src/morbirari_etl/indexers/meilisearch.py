@@ -16,7 +16,7 @@ import meilisearch
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from morbirari_etl.config import MEILI_MASTER_KEY, MEILI_URL
+from morbirari_etl.config import MEILI_MASTER_KEY, MEILI_TIMEOUT, MEILI_URL
 from morbirari_etl.db import (
     Disease,
     DiseaseContent,
@@ -89,7 +89,7 @@ DOMAIN_SYNONYMS: dict[str, dict[str, list[str]]] = {
 
 
 def get_client() -> meilisearch.Client:
-    return meilisearch.Client(MEILI_URL, MEILI_MASTER_KEY)
+    return meilisearch.Client(MEILI_URL, MEILI_MASTER_KEY, timeout=MEILI_TIMEOUT)
 
 
 def index_name(lang: str) -> str:

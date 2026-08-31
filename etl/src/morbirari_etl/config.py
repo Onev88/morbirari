@@ -17,8 +17,18 @@ RAW_DIR = DATA_DIR / "raw"
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql+psycopg://morbirari:morbirari_dev@localhost:5436/morbirari",
+    # 127.0.0.1 y no `localhost` a propósito: en host donde localhost resuelve a ::1
+    # primero, conectar a un puerto cerrado por IPv6 se cuelga hasta el timeout en
+    # vez de rechazar. Con la infra apagada, todo debe fallar en segundos.
+    "postgresql+psycopg://morbirari:morbirari_dev@127.0.0.1:5436/morbirari",
 )
+
+# Tiempo máximo (s) para conectar con Postgres y Meilisearch. Con la infraestructura
+# caída, los tests y comandos que dependen de ella deben fallar/saltar en segundos,
+# no quedarse colgados en un TCP conectando. 2s sobra para una base local; el operador
+# puede ajustarlo por entorno.
+DB_CONNECT_TIMEOUT = int(os.getenv("MORBIRARI_DB_CONNECT_TIMEOUT", "2"))
+MEILI_TIMEOUT = int(os.getenv("MORBIRARI_MEILI_TIMEOUT", "2"))
 
 MEILI_URL = os.getenv("MEILI_URL", "http://localhost:7700")
 MEILI_MASTER_KEY = os.getenv("MEILI_MASTER_KEY", "morbirari_dev_master_key")
