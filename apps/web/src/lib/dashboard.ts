@@ -673,3 +673,87 @@ export async function getClassificationContext(
 
   return [...byClassification.values()];
 }
+
+export type RecentTrialUpdate = {
+  disease_slug: string;
+  disease_orpha: string;
+  disease_label: string;
+  nct_id: string;
+  trial_title: string;
+  trial_status: string;
+  trial_last_update: string | null;
+  trial_start_date: string | null;
+};
+
+export type RecentDrugUpdate = {
+  disease_slug: string;
+  disease_orpha: string;
+  disease_label: string;
+  drug_id: number;
+  medicine_name: string | null;
+  active_substance: string | null;
+  designation_date: string | null;
+  agency: string;
+};
+
+export type HomeRecentUpdates = {
+  trials: RecentTrialUpdate[];
+  drugs: RecentDrugUpdate[];
+};
+
+/**
+ * Obtiene las actualizaciones más recientes de ensayos clínicos y designaciones de fármacos.
+ */
+export async function getHomeRecentUpdates(
+  lang: string,
+  limit = 3
+): Promise<HomeRecentUpdates> {
+  const trials = await sql<RecentTrialUpdate[]>`
+    SELECT 
+      d.slug AS disease_slug,
+      d.orpha_code AS disease_orpha,
+      COALESCE(dl_lang.label, dl_en.label, 'ORPHA ' || d.orpha_code) AS disease_label,
+      t.nct_id,
+      t.title AS trial_title,
+      t.status AS trial_status,
+      t.last_update AS trial_last_update,
+      t.start_date AS trial_start_date
+    FROM disease_trial dt
+    JOIN trial t ON t.nct_id = dt.nct_id
+    JOIN disease d ON d.id = dt.disease_id
+    LEFT JOIN disease_label dl_lang ON dl_lang.disease_id = d.id AND dl_lang.label_type = 'preferred' AND dl_lang.lang = ${lang}
+    LEFT JOIN disease_label dl_en ON dl_en.disease_id = d.id AND dl_en.label_type = 'preferred' AND dl_en.lang = 'en'
+    WHERE d.status = 'active'
+    ORDER BY t.last_update DESC NULLS LAST, t.nct_id
+    LIMIT ${limit}
+  `;
+
+  const drugs = await sql<RecentDrugUpdate[]>`
+    SELECT 
+      d.slug AS disease_slug,
+      d.orpha_code AS disease_orpha,
+      COALESCE(dl_lang.label, dl_en.label, 'ORPHA ' || d.orpha_code) AS disease_label,
+      od.id AS drug_id,
+      od.medicine_name,
+      od.active_substance,
+      od.designation_date,
+      od.agency
+    FROM disease_drug dd
+    JOIN orphan_drug od ON od.id = dd.drug_id
+    JOIN disease d ON d.id = dd.disease_id
+    LEFT JOIN disease_label dl_lang ON dl_lang.disease_id = d.id AND dl_lang.label_type = 'preferred' AND dl_lang.lang = ${lang}
+    LEFT JOIN disease_label dl_en ON dl_en.disease_id = d.id AND dl_en.label_type = 'preferred' AND dl_en.lang = 'en'
+    WHERE d.status = 'active'
+    ORDER BY 
+      CASE 
+        WHEN od.designation_date IS NOT NULL THEN 
+          substring(od.designation_date from 7 for 4) || '-' || substring(od.designation_date from 4 for 2) || '-' || substring(od.designation_date from 1 for 2)
+        ELSE '0000-00-00'
+      END DESC, 
+      od.id
+    LIMIT ${limit}
+  `;
+
+  return { trials, drugs };
+}
+

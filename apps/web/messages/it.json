@@ -207,5 +207,15 @@
     "light": "Chiaro",
     "dark": "Scuro",
     "auto": "Automatico"
+  },
+  "home": {
+    "recentUpdates": "Aggiornamenti recenti",
+    "recentTrials": "Studi clinici recenti",
+    "recentDrugs": "Designazioni di farmaci recenti",
+    "trialLabel": "Studio",
+    "drugLabel": "Farmaco",
+    "updatedAt": "Aggiornato il {date}",
+    "designatedAt": "Designato il {date}",
+    "noRecentUpdates": "Nessun aggiornamento recente disponibile"
   }
 }
