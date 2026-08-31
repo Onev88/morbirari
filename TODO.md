@@ -45,6 +45,32 @@ adelante cursar la solicitud a Orphanet** para ver qué acceso es posible.
 
 **Origen:** sesión de 2026-07-17.
 
+## Enriquecer «Dónde acudir» con fuentes libres
+
+Rescatado de una sesión de 2026-07-18 que quedó sin integrar en TODO.md.
+
+### Asociaciones de pacientes (GARD) — ingesta lista; falta cadencia de refresco
+
+**Estado:** la ingesta completa se corrió el 2026-07-18 (ADR 0006).
+
+- **Refresco periódico:** los enlaces y las organizaciones cambian; entra en la misma
+  disciplina de frescura que los ensayos. Programar `mr ingest gard --resume` en el
+  [workflow programado](.github/workflows/etl-scheduled.yml), con una cadencia propia.
+- **Fragilidad del formato:** el adaptador depende de los JSON estáticos de GARD
+  (`all-account-data.json`, `singles/{id}.json`). Si GARD cambia ese formato, se rompe;
+  conviene un chequeo que avise.
+
+### Datos de los centros de ensayos: web y directorio (ROR / Wikidata)
+
+**Estado:** pendiente (ADR 0006), sin iniciar.
+
+ClinicalTrials.gov no da web ni redes de los centros. La ADR 0006 contempla enriquecer con
+**ROR** (CC0, web institucional) y **Wikidata** (CC0, algunas redes), emparejando el texto
+libre del nombre del centro de forma **conservadora** y marcándolo como inferido. El
+emparejamiento difuso es el riesgo: ante la duda, no enlazar.
+
+**Origen:** sesión de 2026-07-18.
+
 ---
 
 ## Hallazgos de revisión de calidad de código (2026-07-28)
